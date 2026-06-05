@@ -66,9 +66,11 @@ function getMap(
 function getI128(
   m: Record<string, EscrowValue>,
   k: string,
-): I128Like | undefined {
+): I128Like | U128Like | undefined {
   const v = m[k] as unknown;
-  return isI128Like(v) ? (v as I128Like) : undefined;
+  if (isI128Like(v)) return v as I128Like;
+  if (isU128Like(v)) return v as U128Like;
+  return undefined;
 }
 
 type BoolLike = { bool: boolean };
@@ -78,6 +80,9 @@ type MapEntry = { key: { symbol: string }; val: EscrowValue };
 type MapLikePresent = { map: MapEntry[] };
 type I128Parts = { hi?: number | string; lo?: number | string };
 type I128Like = { i128: string | I128Parts };
+type U128Like = { u128: string | I128Parts };
+type U32Like = { u32: number };
+type U64Like = { u64: string | number };
 
 function isBoolLike(v: unknown): v is BoolLike {
   return !!v && typeof (v as Record<"bool", unknown>).bool === "boolean";
@@ -92,12 +97,11 @@ function isMapLike(v: unknown): v is MapLikePresent {
   const m = v as { map?: unknown };
   return !!v && Array.isArray(m.map);
 }
-// (If you don’t use isVecLike anywhere, delete it entirely to fix the unused error)
 
 function isI128Parts(v: unknown): v is I128Parts {
   if (!v || typeof v !== "object") return false;
   const r = v as Record<string, unknown>;
-  return "hi" in r || "lo" in r; // presence indicates the {hi,lo} form
+  return "hi" in r || "lo" in r;
 }
 
 function isI128Like(v: unknown): v is I128Like {
@@ -108,8 +112,30 @@ function isI128Like(v: unknown): v is I128Like {
   return typeof raw === "string" || isI128Parts(raw);
 }
 
-function i128ToBigIntFlexibleSafe(v: I128Like): bigint | null {
-  const raw = v.i128;
+function isU128Like(v: unknown): v is U128Like {
+  if (!v || typeof v !== "object") return false;
+  const r = v as Record<string, unknown>;
+  if (!("u128" in r)) return false;
+  const raw = (r as { u128: unknown }).u128;
+  return typeof raw === "string" || isI128Parts(raw);
+}
+
+function isU32Like(v: unknown): v is U32Like {
+  return (
+    !!v &&
+    typeof v === "object" &&
+    typeof (v as Record<string, unknown>).u32 === "number"
+  );
+}
+
+function isU64Like(v: unknown): v is U64Like {
+  if (!v || typeof v !== "object") return false;
+  const u64 = (v as Record<string, unknown>).u64;
+  return u64 !== undefined && (typeof u64 === "string" || typeof u64 === "number");
+}
+
+function i128ToBigIntFlexibleSafe(v: I128Like | U128Like): bigint | null {
+  const raw = "i128" in v ? v.i128 : v.u128;
   if (typeof raw === "string") {
     try {
       return BigInt(raw);
@@ -192,18 +218,13 @@ export const extractValue = (
       return str;
     }
 
-    // Check for u32 format
-    const u32Val = val as { u32?: number };
-    if (u32Val && typeof u32Val.u32 === "number") {
-      const num = u32Val.u32;
-      return (num > 100 ? num / 100 : num).toFixed(2) + "%";
+    if (isU32Like(val)) {
+      return (val.u32 > 100 ? val.u32 / 100 : val.u32).toFixed(2) + "%";
     }
 
-    // Check for u64 format
-    const u64Val = val as { u64?: string | number };
-    if (u64Val && u64Val.u64 !== undefined) {
+    if (isU64Like(val)) {
       const num =
-        typeof u64Val.u64 === "string" ? parseInt(u64Val.u64, 10) : u64Val.u64;
+        typeof val.u64 === "string" ? parseInt(val.u64, 10) : val.u64;
       if (!isNaN(num)) {
         return (num > 100 ? num / 100 : num).toFixed(2) + "%";
       }
@@ -228,27 +249,39 @@ export const extractValue = (
     if (key === "platform_fee") {
       const big = i128ToBigIntFlexibleSafe(val);
       if (big === null) return "N/A";
-
-      // Platform fee might come as:
-      // - Basis points (500 = 5%) - divide by 100
-      // - Direct percentage (5 = 5%) - use as-is
-      // - Percentage with decimals (500 = 5.00%) - divide by 100
-      // Let's check the actual value to determine the format
       const numValue = Number(big);
-
-      // If value is > 100, it's likely basis points (divide by 100)
-      // If value is <= 100, it might be direct percentage
-      if (numValue > 100) {
-        return (numValue / 100).toFixed(2) + "%";
-      } else {
-        // Value is <= 100, treat as direct percentage
-        return numValue.toFixed(2) + "%";
-      }
+      return (numValue > 100 ? numValue / 100 : numValue).toFixed(2) + "%";
     }
     const d = safeDecimals(getDecimalsFromEscrowMap(data));
     const big = i128ToBigIntFlexibleSafe(val);
     if (big === null) return "N/A";
     return (Number(big) / Math.pow(10, d)).toFixed(d);
+  }
+
+  // u128 — same binary layout as i128 but unsigned (new contract types may use this)
+  if (isU128Like(val)) {
+    if (key === "platform_fee") {
+      const big = i128ToBigIntFlexibleSafe(val);
+      if (big === null) return "N/A";
+      const numValue = Number(big);
+      return (numValue > 100 ? numValue / 100 : numValue).toFixed(2) + "%";
+    }
+    const d = safeDecimals(getDecimalsFromEscrowMap(data));
+    const big = i128ToBigIntFlexibleSafe(val);
+    if (big === null) return "N/A";
+    return (Number(big) / Math.pow(10, d)).toFixed(d);
+  }
+
+  // u64 — for numeric fields encoded as u64
+  if (isU64Like(val)) {
+    const num =
+      typeof val.u64 === "string" ? parseInt(val.u64, 10) : val.u64;
+    if (isNaN(num)) return "N/A";
+    if (key === "platform_fee") {
+      return (num > 100 ? num / 100 : num).toFixed(2) + "%";
+    }
+    const d = safeDecimals(getDecimalsFromEscrowMap(data));
+    return (num / Math.pow(10, d)).toFixed(d);
   }
 
   return "N/A";
@@ -434,7 +467,7 @@ export const organizeEscrowData = (
   // balance
   let balance = String(extractValue(escrowData, "balance", isMobile));
   const balanceRaw = escrowData.find((e) => e.key.symbol === "balance")?.val;
-  if (isI128Like(balanceRaw)) {
+  if (isI128Like(balanceRaw) || isU128Like(balanceRaw)) {
     const big = i128ToBigIntFlexibleSafe(balanceRaw);
     const d = safeDecimals(getDecimalsFromEscrowMap(escrowData));
     balance =
