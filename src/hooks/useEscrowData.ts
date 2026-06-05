@@ -31,6 +31,16 @@ export function useEscrowData(
 
     try {
       const data = await getLedgerKeyContractCode(contractId, network);
+
+      if (data.length === 0) {
+        setRaw(null);
+        setOrganized(null);
+        setError(
+          "Escrow data parsed but no fields found. The contract schema may have changed.",
+        );
+        return;
+      }
+
       setRaw(data);
       setOrganized(organizeEscrowData(data, contractId, isMobile));
     } catch (e) {
