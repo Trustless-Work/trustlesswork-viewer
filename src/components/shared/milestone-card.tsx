@@ -16,7 +16,11 @@ interface MilestoneProps {
   resolved_flag?: boolean;
   signer?: string;
   approver?: string;
+  receiver?: string;
 }
+
+const formatAddressForCard = (address: string): string =>
+  address.length > 18 ? `${address.slice(0, 8)}...${address.slice(-6)}` : address;
 
 export const MilestoneCard = ({
   index,
@@ -31,6 +35,7 @@ export const MilestoneCard = ({
   resolved_flag,
   signer,
   approver,
+  receiver,
 }: MilestoneProps) => {
   const cardVariants = {
     hidden: { opacity: 0, y: 20 },
@@ -109,8 +114,14 @@ export const MilestoneCard = ({
               </div>
             )}
 
-            {(signer || approver) && (
+            {(receiver || signer || approver) && (
               <div className="flex flex-col gap-1 mt-2 text-xs text-muted-foreground">
+                {receiver && (
+                  <span className="break-all">
+                    <span className="font-medium">Receiver:</span>{" "}
+                    <span title={receiver}>{formatAddressForCard(receiver)}</span>
+                  </span>
+                )}
                 {signer && (
                   <span>
                     <span className="font-medium">Signer:</span> {signer}

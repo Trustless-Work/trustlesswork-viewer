@@ -17,6 +17,7 @@ export interface ParsedMilestone {
   resolved_flag?: boolean;
   signer?: string;
   approver?: string;
+  receiver?: string;
 }
 
 export type EscrowFlags = {
@@ -372,6 +373,14 @@ export const extractMilestones = (
             resolved_flag,
             signer: getAddr(milestoneMap, "signer"),
             approver: getAddr(milestoneMap, "approver"),
+            // Current multi-release milestone storage uses `receiver` for the
+            // milestone-level fund recipient. Keep compatible fallbacks for
+            // older/proposed schemas that may name the same address differently.
+            receiver:
+              getAddr(milestoneMap, "receiver") ??
+              getAddr(milestoneMap, "receiver_address") ??
+              getAddr(milestoneMap, "recipient") ??
+              getAddr(milestoneMap, "recipient_address"),
           },
         ];
       }
