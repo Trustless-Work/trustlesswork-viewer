@@ -6,7 +6,6 @@ import { TitleCard } from "@/components/escrow/title-card";
 import { TabView } from "@/components/escrow/tab-view";
 import { DesktopView } from "@/components/escrow/desktop-view";
 import { WelcomeState } from "@/components/escrow/welcome-state";
-import error from "next/error";
 import { useNetwork } from "@/contexts/NetworkContext"; // Add this line
 
 interface EscrowContentProps {
@@ -21,6 +20,10 @@ export const EscrowContent = ({
   isMobile,
 }: EscrowContentProps) => {
   const { currentNetwork } = useNetwork(); // Get network from context
+
+  // ✅ Fixed: Welcome state based on actual component state, not next/error import
+  // showWelcome when there's no data and not loading (error is handled in parent)
+  const showWelcome = !organized && !loading;
 
   return (
     <div className="flex flex-col items-center">
@@ -74,7 +77,7 @@ export const EscrowContent = ({
       </AnimatePresence>
 
       {/* No data state */}
-      <WelcomeState showWelcome={!organized && !loading && !error} />
+      <WelcomeState showWelcome={showWelcome} />
     </div>
   );
 };
