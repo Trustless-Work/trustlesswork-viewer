@@ -9,6 +9,7 @@ import { LoadingLogo } from "@/components/shared/loading-logo";
 import { EXAMPLE_CONTRACT_IDS } from "@/lib/escrow-constants";
 import { useRouter } from "next/navigation";
 import { useNetwork } from "@/contexts/NetworkContext";
+import { getErrorMessage } from "@/lib/utils";
 
 import { Header } from "@/components/escrow/header";
 import { SearchCard } from "@/components/escrow/search-card";
@@ -37,13 +38,6 @@ interface EscrowDetailsClientProps {
 
 // === DEBUG LOGGING (EscrowDetails) ===
 const DEBUG = process.env.NODE_ENV !== "production";
-
-// ✅ Safe error message helper (replaces (err: any))
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  return fallback;
-}
 
 const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
   initialEscrowId,

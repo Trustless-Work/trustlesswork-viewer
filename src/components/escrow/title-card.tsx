@@ -9,6 +9,7 @@ import { exportEscrowToPDF } from "@/utils/escrowExport";
 import { useNetwork } from "@/contexts/NetworkContext";
 import { useState } from "react";
 import { toast } from "sonner";
+import { getErrorMessage } from "@/lib/utils";
 
 interface TitleCardProps {
   title: string;
@@ -16,13 +17,6 @@ interface TitleCardProps {
   progress: number;
   escrowType?: EscrowType;
   organized?: OrganizedEscrowData | null;
-}
-
-// ✅ Safe error message helper
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  return fallback;
 }
 
 export const TitleCard = ({
