@@ -80,14 +80,14 @@ export const SearchCard = ({
                     );
                     return;
                   }
-                  try {
-                    window.open(
-                      getStellarExpertContractUrl(currentNetwork, idToUse),
-                      "_blank",
-                    );
-                  } catch (error) {
+                  const expertWindow = window.open(
+                    getStellarExpertContractUrl(currentNetwork, idToUse),
+                    "_blank",
+                    "noopener,noreferrer",
+                  );
+                  if (!expertWindow) {
                     alert(
-                      `Error opening Stellar Expert: ${error instanceof Error ? error.message : "Unknown error"}`,
+                      "Popup was blocked. Please allow popups for this site to open Stellar Expert.",
                     );
                   }
                 }}
@@ -114,14 +114,14 @@ export const SearchCard = ({
                     );
                     return;
                   }
-                  try {
-                    window.open(
-                      getStellarLabUrl(currentNetwork, idToUse),
-                      "_blank",
-                    );
-                  } catch (error) {
+                  const labWindow = window.open(
+                    getStellarLabUrl(currentNetwork, idToUse),
+                    "_blank",
+                    "noopener,noreferrer",
+                  );
+                  if (!labWindow) {
                     alert(
-                      `Error opening Stellar Lab: ${error instanceof Error ? error.message : "Unknown error"}`,
+                      "Popup was blocked. Please allow popups for this site to open Stellar Lab.",
                     );
                   }
                 }}
