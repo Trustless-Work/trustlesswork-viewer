@@ -7,7 +7,7 @@ import { cardVariants } from "@/utils/animations/animation-variants";
 import type { EscrowType, OrganizedEscrowData } from "@/mappers/escrow-mapper";
 import { exportEscrowToPDF } from "@/utils/escrowExport";
 import { useNetwork } from "@/contexts/NetworkContext";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { toast } from "sonner";
 import { getErrorMessage } from "@/lib/utils";
 
@@ -29,7 +29,7 @@ export const TitleCard = ({
   const { currentNetwork } = useNetwork();
   const [isExporting, setIsExporting] = useState(false);
 
-  const handleExportPDF = async () => {
+  const handleExportPDF = useCallback(async () => {
     if (!organized) {
       toast.error("No escrow data available to export");
       return;
@@ -48,7 +48,7 @@ export const TitleCard = ({
     } finally {
       setIsExporting(false);
     }
-  };
+  }, [organized, currentNetwork, isExporting]);
 
   const isDisabled = !organized || isExporting;
 

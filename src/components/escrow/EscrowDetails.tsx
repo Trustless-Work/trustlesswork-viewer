@@ -256,6 +256,7 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
               loading={loading}
               organized={organizedWithLive}
               isMobile={isMobile}
+              error={error} 
             />
           )}
 

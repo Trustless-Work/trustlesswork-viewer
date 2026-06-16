@@ -12,18 +12,20 @@ interface EscrowContentProps {
   loading: boolean;
   organized: OrganizedEscrowData | null;
   isMobile: boolean;
+  error: string | null;
 }
 
 export const EscrowContent = ({
   loading,
   organized,
   isMobile,
+  error,
 }: EscrowContentProps) => {
   const { currentNetwork } = useNetwork(); // Get network from context
 
   // ✅ Fixed: Welcome state based on actual component state, not next/error import
   // showWelcome when there's no data and not loading (error is handled in parent)
-  const showWelcome = !organized && !loading;
+  const showWelcome = !organized && !loading && !error;
 
   return (
     <div className="flex flex-col items-center">
