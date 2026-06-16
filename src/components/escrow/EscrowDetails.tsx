@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { Inter } from "next/font/google";
@@ -38,6 +37,13 @@ interface EscrowDetailsClientProps {
 
 // === DEBUG LOGGING (EscrowDetails) ===
 const DEBUG = process.env.NODE_ENV !== "production";
+
+// ✅ Safe error message helper (replaces (err: any))
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  return fallback;
+}
 
 const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
   initialEscrowId,
@@ -102,8 +108,10 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
         } else {
           setTransactions(response.transactions);
         }
-      } catch (err: any) {
-        setTransactionError(err.message || "Failed to fetch transactions");
+      } catch (err: unknown) {
+        // ✅ Replaced (err: any) with safe unknown error handling
+        const message = getErrorMessage(err, "Failed to fetch transactions");
+        setTransactionError(message);
       } finally {
         setTransactionLoading(false);
       }
