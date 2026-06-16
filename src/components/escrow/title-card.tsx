@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { DollarSign, CheckSquare, FileDown } from "lucide-react";
+import { DollarSign, CheckSquare, FileDown, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProgressBar } from "@/components/shared/progress-bar";
@@ -7,6 +7,8 @@ import { cardVariants } from "@/utils/animations/animation-variants";
 import type { EscrowType, OrganizedEscrowData } from "@/mappers/escrow-mapper";
 import { exportEscrowToPDF } from "@/utils/escrowExport";
 import { useNetwork } from "@/contexts/NetworkContext";
+import { useState } from "react";
+import { toast } from "sonner";
 
 interface TitleCardProps {
   title: string;
@@ -14,6 +16,13 @@ interface TitleCardProps {
   progress: number;
   escrowType?: EscrowType;
   organized?: OrganizedEscrowData | null;
+}
+
+// ✅ Safe error message helper
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  return fallback;
 }
 
 export const TitleCard = ({
@@ -24,12 +33,30 @@ export const TitleCard = ({
   organized,
 }: TitleCardProps) => {
   const { currentNetwork } = useNetwork();
+  const [isExporting, setIsExporting] = useState(false);
 
-  const handleExportPDF = () => {
-    if (organized) {
-      exportEscrowToPDF(organized, currentNetwork);
+  const handleExportPDF = async () => {
+    if (!organized) {
+      toast.error("No escrow data available to export");
+      return;
+    }
+
+    if (isExporting) return;
+
+    setIsExporting(true);
+
+    try {
+      await exportEscrowToPDF(organized, currentNetwork);
+      toast.success("PDF exported successfully");
+    } catch (error) {
+      const message = getErrorMessage(error, "Failed to export PDF");
+      toast.error(message);
+    } finally {
+      setIsExporting(false);
     }
   };
+
+  const isDisabled = !organized || isExporting;
 
   return (
     <motion.div
@@ -70,11 +97,29 @@ export const TitleCard = ({
               {organized && (
                 <button
                   onClick={handleExportPDF}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium  bg-primary cursor-pointer hover:bg-primary/10 border border-primary/20 rounded-lg  text-primary-foreground transition-all duration-200 transform hover:scale-105 active:scale-95"
-                  title="Export to PDF"
+                  disabled={isDisabled}
+                  className={`flex items-center gap-2 px-3 py-1.5 text-sm font-medium border border-primary/20 rounded-lg transition-all duration-200 transform hover:scale-105 active:scale-95 ${
+                    isDisabled
+                      ? "opacity-50 cursor-not-allowed"
+                      : "bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer"
+                  }`}
+                  title={
+                    isDisabled && isExporting
+                      ? "Exporting..."
+                      : "Export to PDF"
+                  }
                 >
-                  <FileDown className="h-4 w-4" />
-                  <span>Export to PDF</span>
+                  {isExporting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Exporting...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FileDown className="h-4 w-4" />
+                      <span>Export to PDF</span>
+                    </>
+                  )}
                 </button>
               )}
               <Badge
