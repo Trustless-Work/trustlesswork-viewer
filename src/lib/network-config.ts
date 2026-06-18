@@ -31,6 +31,25 @@ export function getDefaultNetwork(): NetworkType {
 }
 
 /**
+ * Generates a Stellar Expert URL for the contract explorer
+ *
+ * Stellar Expert URL format:
+ * Testnet: https://stellar.expert/explorer/testnet/contract/{contractId}
+ * Mainnet: https://stellar.expert/explorer/public/contract/{contractId}
+ *
+ * @param network - The network type (testnet or mainnet)
+ * @param contractId - The contract ID to open in Stellar Expert
+ * @returns The complete Stellar Expert URL
+ */
+export function getStellarExpertContractUrl(
+  network: NetworkType,
+  contractId: string,
+): string {
+  const stellarExpertNetwork = network === "mainnet" ? "public" : "testnet";
+  return `https://stellar.expert/explorer/${stellarExpertNetwork}/contract/${contractId.trim()}`;
+}
+
+/**
  * Generates a Stellar Lab URL for the contract explorer
  *
  * Stellar Lab URL format:

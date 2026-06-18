@@ -10,7 +10,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { cardVariants } from "@/utils/animations/animation-variants";
-import { getStellarLabUrl } from "@/lib/network-config";
+import {
+  getStellarLabUrl,
+  getStellarExpertContractUrl,
+} from "@/lib/network-config";
 import type { NetworkType } from "@/lib/network-config";
 import type { OrganizedEscrowData } from "@/mappers/escrow-mapper";
 import type { EscrowMap } from "@/utils/ledgerkeycontract";
@@ -44,6 +47,7 @@ export const SearchCard = ({
   organized,
   initialEscrowId,
   currentNetwork = "testnet",
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   setShowOnlyTransactions,
 }: SearchCardProps) => {
   return (
@@ -61,12 +65,37 @@ export const SearchCard = ({
           {raw && (
             <div className="flex flex-col sm:flex-row gap-2 p-3 rounded-lg">
               <Button
-                onClick={() => setShowOnlyTransactions?.(true)}
-                aria-label="View Transaction History"
+                onClick={() => {
+                  const escrowIdFromData = organized?.properties?.escrow_id as
+                    | string
+                    | undefined;
+                  const idToUse =
+                    escrowIdFromData?.trim() ||
+                    contractId?.trim() ||
+                    initialEscrowId?.trim();
+
+                  if (!idToUse) {
+                    alert(
+                      "Error: Contract ID is required to open in Stellar Expert. Please ensure an escrow contract is loaded.",
+                    );
+                    return;
+                  }
+                  const expertWindow = window.open(
+                    getStellarExpertContractUrl(currentNetwork, idToUse),
+                    "_blank",
+                    "noopener,noreferrer",
+                  );
+                  if (!expertWindow) {
+                    alert(
+                      "Popup was blocked. Please allow popups for this site to open Stellar Expert.",
+                    );
+                  }
+                }}
+                aria-label="Open in Stellar Expert"
                 className="flex-1 min-w-0 inline-flex justify-center items-center gap-2 rounded-lg transition-all duration-200 hover:shadow-sm"
               >
-                <ChevronRight className="h-4 w-4 opacity-80" />
-                Transaction History
+                <ExternalLink className="h-4 w-4 shrink-0" />
+                <span className="truncate">Open in Stellar Expert</span>
               </Button>
               <Button
                 variant="outline"
@@ -85,21 +114,21 @@ export const SearchCard = ({
                     );
                     return;
                   }
-                  try {
-                    window.open(
-                      getStellarLabUrl(currentNetwork, idToUse),
-                      "_blank",
-                    );
-                  } catch (error) {
+                  const labWindow = window.open(
+                    getStellarLabUrl(currentNetwork, idToUse),
+                    "_blank",
+                    "noopener,noreferrer",
+                  );
+                  if (!labWindow) {
                     alert(
-                      `Error opening Stellar Lab: ${error instanceof Error ? error.message : "Unknown error"}`,
+                      "Popup was blocked. Please allow popups for this site to open Stellar Lab.",
                     );
                   }
                 }}
                 className="flex-1 min-w-0 inline-flex justify-center items-center gap-2 rounded-lg border-primary/30 hover:bg-primary/5 hover:border-primary/50"
                 title="Open contract in Stellar Lab"
               >
-                <ExternalLink className="h-4 w-4 shrink-0" />
+                <ChevronRight className="h-4 w-4 shrink-0" />
                 <span className="truncate">Open in Stellar Lab</span>
               </Button>
             </div>
