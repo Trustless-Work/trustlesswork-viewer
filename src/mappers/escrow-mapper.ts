@@ -17,6 +17,7 @@ export interface ParsedMilestone {
   resolved_flag?: boolean;
   signer?: string;
   approver?: string;
+  receiver?: string;
 }
 
 export type EscrowFlags = {
@@ -48,6 +49,19 @@ function getAddr(
 ): string | undefined {
   const v = m[k] as unknown;
   return isAddrLike(v) ? v.address : undefined;
+}
+// Reads an address from the first matching key. The multi-release milestone
+// schema names the per-milestone payee `receiver`, but tolerate the known
+// alternates so a contract revision doesn't silently drop the field.
+function getAddrAny(
+  m: Record<string, EscrowValue>,
+  keys: string[],
+): string | undefined {
+  for (const k of keys) {
+    const addr = getAddr(m, k);
+    if (addr) return addr;
+  }
+  return undefined;
 }
 function getBool(
   m: Record<string, EscrowValue>,
@@ -372,6 +386,12 @@ export const extractMilestones = (
             resolved_flag,
             signer: getAddr(milestoneMap, "signer"),
             approver: getAddr(milestoneMap, "approver"),
+            receiver: getAddrAny(milestoneMap, [
+              "receiver",
+              "receiver_address",
+              "recipient",
+              "recipient_address",
+            ]),
           },
         ];
       }

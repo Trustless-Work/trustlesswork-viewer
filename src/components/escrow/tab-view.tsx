@@ -149,6 +149,7 @@ export const TabView = ({ organized, network }: TabViewProps) => {
                       resolved_flag={milestone.resolved_flag}
                       signer={milestone.signer}
                       approver={milestone.approver}
+                      receiver={milestone.receiver}
                     />
                   ))}
                 </div>

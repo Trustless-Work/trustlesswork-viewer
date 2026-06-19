@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "./status-badge";
 import { InfoTooltip } from "./info-tooltip";
+import { DetailRow } from "./detail-row";
 import { motion } from "framer-motion";
 
 interface MilestoneProps {
@@ -16,6 +17,7 @@ interface MilestoneProps {
   resolved_flag?: boolean;
   signer?: string;
   approver?: string;
+  receiver?: string;
 }
 
 export const MilestoneCard = ({
@@ -31,6 +33,7 @@ export const MilestoneCard = ({
   resolved_flag,
   signer,
   approver,
+  receiver,
 }: MilestoneProps) => {
   const cardVariants = {
     hidden: { opacity: 0, y: 20 },
@@ -109,17 +112,43 @@ export const MilestoneCard = ({
               </div>
             )}
 
-            {(signer || approver) && (
-              <div className="flex flex-col gap-1 mt-2 text-xs text-muted-foreground">
+            {(receiver || signer || approver) && (
+              <div className="mt-3">
+                {receiver && (
+                  <DetailRow
+                    label="Receiver"
+                    value={receiver}
+                    tooltip={
+                      tooltips.milestone_receiver ||
+                      "Address that receives the funds for this milestone."
+                    }
+                    canCopy
+                    isAddress
+                  />
+                )}
                 {signer && (
-                  <span>
-                    <span className="font-medium">Signer:</span> {signer}
-                  </span>
+                  <DetailRow
+                    label="Signer"
+                    value={signer}
+                    tooltip={
+                      tooltips.milestone_signer ||
+                      "Address authorized to release this milestone."
+                    }
+                    canCopy
+                    isAddress
+                  />
                 )}
                 {approver && (
-                  <span>
-                    <span className="font-medium">Approver:</span> {approver}
-                  </span>
+                  <DetailRow
+                    label="Approver"
+                    value={approver}
+                    tooltip={
+                      tooltips.milestone_approver ||
+                      "Address that approves this milestone."
+                    }
+                    canCopy
+                    isAddress
+                  />
                 )}
               </div>
             )}
