@@ -125,6 +125,7 @@ export const DesktopView = ({ organized, network }: DesktopViewProps) => {
                     resolved_flag={milestone.resolved_flag}
                     signer={milestone.signer}
                     approver={milestone.approver}
+                    receiver={milestone.receiver}
                   />
                 </motion.div>
               ))}

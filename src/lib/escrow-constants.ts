@@ -49,6 +49,7 @@ export const FIELD_TOOLTIPS: { [key: string]: string } = {
   milestone_description: "Details of the milestone's deliverable.",
   milestone_status: "Indicates if milestone is pending or completed.",
   milestone_approved: "Set to true if the milestone has been approved.",
+  milestone_receiver: "Address that receives the funds for this milestone.",
   title: "Title of the escrow contract.",
   description: "Description of the escrow purpose.",
   trustline: "Stellar asset that is used for the escrow.",
