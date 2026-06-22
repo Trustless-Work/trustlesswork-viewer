@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { Inter } from "next/font/google";
@@ -10,6 +9,7 @@ import { LoadingLogo } from "@/components/shared/loading-logo";
 import { EXAMPLE_CONTRACT_IDS } from "@/lib/escrow-constants";
 import { useRouter } from "next/navigation";
 import { useNetwork } from "@/contexts/NetworkContext";
+import { getErrorMessage } from "@/lib/utils";
 
 import { Header } from "@/components/escrow/header";
 import { SearchCard } from "@/components/escrow/search-card";
@@ -102,8 +102,10 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
         } else {
           setTransactions(response.transactions);
         }
-      } catch (err: any) {
-        setTransactionError(err.message || "Failed to fetch transactions");
+      } catch (err: unknown) {
+        // ✅ Replaced (err: any) with safe unknown error handling
+        const message = getErrorMessage(err, "Failed to fetch transactions");
+        setTransactionError(message);
       } finally {
         setTransactionLoading(false);
       }
@@ -254,6 +256,7 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
               loading={loading}
               organized={organizedWithLive}
               isMobile={isMobile}
+              error={error} 
             />
           )}
 
