@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Contract } from "@stellar/stellar-sdk";
+import { ADDRESS_CHARS, formatAddress } from "@/lib/format-address";
 
 // Types for transaction data
 export interface TransactionMetadata {
@@ -261,9 +262,5 @@ export function formatTransactionTime(createdAt: string): string {
  * Helper function to truncate transaction hash for display
  */
 export function truncateHash(hash: string, isMobile: boolean = false): string {
-  if (!hash) return "N/A";
-  if (isMobile) {
-    return `${hash.substring(0, 6)}...${hash.substring(hash.length - 4)}`;
-  }
-  return `${hash.substring(0, 8)}...${hash.substring(hash.length - 6)}`;
+  return formatAddress(hash, isMobile ? ADDRESS_CHARS.sm : ADDRESS_CHARS.md);
 }

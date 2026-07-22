@@ -1,9 +1,15 @@
 // src/mappers/escrow-mapper.ts
-import { truncateAddress, calculateProgress } from "@/lib/escrow-constants";
+import { calculateProgress } from "@/lib/escrow-constants";
 import type { EscrowMap, EscrowValue } from "@/utils/ledgerkeycontract";
+import {
+  extractTrustlineInfo,
+  type TrustlineInfo,
+} from "@/lib/trustline";
+import type { NetworkType } from "@/lib/network-config";
 
 export type EscrowType = "single-release" | "multi-release";
 export type EscrowExtractedValue = string | { label: string; url: string };
+export type { TrustlineInfo };
 
 export interface ParsedMilestone {
   id: number;
@@ -31,6 +37,8 @@ export interface OrganizedEscrowData {
   title: string;
   description: string;
   properties: Record<string, string>;
+  /** Structured trustline (asset / issuer / SAC). Prefer over `properties.trustline`. */
+  trustline: TrustlineInfo;
   roles: Record<string, string>;
   flags: EscrowFlags;
   milestones: ParsedMilestone[];
@@ -187,6 +195,12 @@ function formatFixed(n: number, digits: number): string {
   return n.toFixed(digits);
 }
 
+/** e.g. 5 → "5%", 5.5 → "5.5%", 500 (bps) → "5%" */
+function formatPlatformFeePercent(raw: number): string {
+  const pct = raw > 100 ? raw / 100 : raw;
+  return `${parseFloat(pct.toFixed(2))}%`;
+}
+
 /* ---------------- main ---------------- */
 
 export function detectEscrowType(data: EscrowMap | null): EscrowType {
@@ -206,8 +220,6 @@ export function detectEscrowType(data: EscrowMap | null): EscrowType {
 export const extractValue = (
   data: EscrowMap | null,
   key: string,
-  isMobile: boolean,
-  isAddress = false,
 ): EscrowExtractedValue => {
   if (!data) return "N/A";
   const item = data.find((entry) => entry.key.symbol === key);
@@ -226,29 +238,28 @@ export const extractValue = (
       const cleanStr = str.replace("%", "").trim();
       const num = parseFloat(cleanStr);
       if (!isNaN(num)) {
-        // If > 100, treat as basis points; otherwise as percentage
-        return (num > 100 ? num / 100 : num).toFixed(2) + "%";
+        return formatPlatformFeePercent(num);
       }
       return str;
     }
 
     if (isU32Like(val)) {
-      return (val.u32 > 100 ? val.u32 / 100 : val.u32).toFixed(2) + "%";
+      return formatPlatformFeePercent(val.u32);
     }
 
     if (isU64Like(val)) {
       const num =
         typeof val.u64 === "string" ? parseInt(val.u64, 10) : val.u64;
       if (!isNaN(num)) {
-        return (num > 100 ? num / 100 : num).toFixed(2) + "%";
+        return formatPlatformFeePercent(num);
       }
     }
   }
 
   if (isBoolLike(val)) return val.bool ? "True" : "False";
-  if (isStrLike(val)) return val.string; // ✅ no more "never"
-  if (isAddrLike(val))
-    return isAddress ? truncateAddress(val.address, isMobile) : val.address;
+  if (isStrLike(val)) return val.string;
+  if (isAddrLike(val)) return val.address;
+
 
   if (isMapLike(val) && key === "trustline") {
     const tm: MapEntry[] = val.map ?? [];
@@ -263,8 +274,7 @@ export const extractValue = (
     if (key === "platform_fee") {
       const big = i128ToBigIntFlexibleSafe(val);
       if (big === null) return "N/A";
-      const numValue = Number(big);
-      return (numValue > 100 ? numValue / 100 : numValue).toFixed(2) + "%";
+      return formatPlatformFeePercent(Number(big));
     }
     const d = safeDecimals(getDecimalsFromEscrowMap(data));
     const big = i128ToBigIntFlexibleSafe(val);
@@ -277,8 +287,7 @@ export const extractValue = (
     if (key === "platform_fee") {
       const big = i128ToBigIntFlexibleSafe(val);
       if (big === null) return "N/A";
-      const numValue = Number(big);
-      return (numValue > 100 ? numValue / 100 : numValue).toFixed(2) + "%";
+      return formatPlatformFeePercent(Number(big));
     }
     const d = safeDecimals(getDecimalsFromEscrowMap(data));
     const big = i128ToBigIntFlexibleSafe(val);
@@ -292,7 +301,7 @@ export const extractValue = (
       typeof val.u64 === "string" ? parseInt(val.u64, 10) : val.u64;
     if (isNaN(num)) return "N/A";
     if (key === "platform_fee") {
-      return (num > 100 ? num / 100 : num).toFixed(2) + "%";
+      return formatPlatformFeePercent(num);
     }
     const d = safeDecimals(getDecimalsFromEscrowMap(data));
     return (num / Math.pow(10, d)).toFixed(d);
@@ -404,7 +413,6 @@ export const extractMilestones = (
 
 export const extractRoles = (
   data: EscrowMap | null,
-  isMobile: boolean,
 ): Record<string, string> => {
   if (!data) return {};
   const rolesEntry = data.find((entry) => entry.key.symbol === "roles");
@@ -413,7 +421,7 @@ export const extractRoles = (
     (acc, entry) => {
       const addr = entry.val?.address;
       if (entry.key?.symbol && typeof addr === "string") {
-        acc[entry.key.symbol] = truncateAddress(addr, isMobile);
+        acc[entry.key.symbol] = addr;
       }
       return acc;
     },
@@ -461,21 +469,23 @@ export const extractFlags = (data: EscrowMap | null): EscrowFlags => {
 export const organizeEscrowData = (
   escrowData: EscrowMap | null,
   contractId: string,
-  isMobile: boolean,
+  network: NetworkType = "testnet",
 ): OrganizedEscrowData | null => {
   if (!escrowData) return null;
 
   const decimals = safeDecimals(getDecimalsFromEscrowMap(escrowData));
   const escrowType = detectEscrowType(escrowData);
   const milestones = extractMilestones(escrowData, escrowType);
-  const progress = calculateProgress(milestones);
-  const roles = extractRoles(escrowData, isMobile);
+  const roles = extractRoles(escrowData);
   const flags = extractFlags(escrowData);
+  const progress = calculateProgress(milestones, {
+    released: flags.release_flag === "True",
+    resolved: flags.resolved_flag === "True",
+  });
+  const trustline = extractTrustlineInfo(escrowData, network);
 
   // amount
-  let totalAmount: string = String(
-    extractValue(escrowData, "amount", isMobile),
-  );
+  let totalAmount: string = String(extractValue(escrowData, "amount"));
   if (escrowType === "multi-release") {
     const sum = milestones.reduce((acc, m) => {
       if (m.amount && !isNaN(parseFloat(m.amount))) acc += parseFloat(m.amount);
@@ -485,7 +495,7 @@ export const organizeEscrowData = (
   }
 
   // balance
-  let balance = String(extractValue(escrowData, "balance", isMobile));
+  let balance = String(extractValue(escrowData, "balance"));
   const balanceRaw = escrowData.find((e) => e.key.symbol === "balance")?.val;
   if (isI128Like(balanceRaw) || isU128Like(balanceRaw)) {
     const big = i128ToBigIntFlexibleSafe(balanceRaw);
@@ -501,21 +511,27 @@ export const organizeEscrowData = (
 
   // balance (UI-friendly → 2 decimals)
   const displayBalance = Number(balance) ? Number(balance).toFixed(2) : "0.00";
+
+  // Compact string kept for anything still reading properties.trustline
+  const trustlineFallback =
+    trustline.contractId ??
+    trustline.issuer ??
+    String(extractValue(escrowData, "trustline"));
+
   return {
-    title: String(extractValue(escrowData, "title", isMobile)),
-    description: String(extractValue(escrowData, "description", isMobile)),
+    title: String(extractValue(escrowData, "title")),
+    description: String(extractValue(escrowData, "description")),
     properties: {
       escrow_id: contractId,
       amount: displayAmount,
       balance: displayBalance,
-      platform_fee: String(extractValue(escrowData, "platform_fee", isMobile)),
-      engagement_id: String(
-        extractValue(escrowData, "engagement_id", isMobile),
-      ),
-      trustline: String(extractValue(escrowData, "trustline", isMobile)),
+      platform_fee: String(extractValue(escrowData, "platform_fee")),
+      engagement_id: String(extractValue(escrowData, "engagement_id")),
+      trustline: trustlineFallback,
     },
+    trustline,
     roles,
-    flags, // <-- now correctly typed
+    flags,
     milestones,
     progress,
     escrowType,
