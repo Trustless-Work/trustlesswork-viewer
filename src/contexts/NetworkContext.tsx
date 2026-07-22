@@ -25,10 +25,8 @@ interface NetworkProviderProps {
 export function NetworkProvider({ children }: NetworkProviderProps) {
   const [currentNetwork, setCurrentNetwork] =
     useState<NetworkType>(getDefaultNetwork());
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
     const savedNetwork = safeLocalStorage.getItem(
       "escrow-viewer-network",
     ) as NetworkType;
@@ -39,8 +37,6 @@ export function NetworkProvider({ children }: NetworkProviderProps) {
       setCurrentNetwork(savedNetwork);
     }
   }, []);
-
-  if (!mounted) return null;
 
   const setNetwork = (network: NetworkType) => {
     setCurrentNetwork(network);

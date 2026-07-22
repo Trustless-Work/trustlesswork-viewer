@@ -279,6 +279,57 @@ export async function fetchTokenDecimals(
   }
 }
 
+function scValToPlainString(scv: xdr.ScVal): string | null {
+  try {
+    if (scv.switch() === xdr.ScValType.scvString()) {
+      return scv.str().toString();
+    }
+    if (scv.switch() === xdr.ScValType.scvSymbol()) {
+      return scv.sym().toString();
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/** Read a SEP-41 string field (`symbol` / `name`). Returns null on failure. */
+async function fetchTokenString(
+  network: NetworkType,
+  tokenContractId: string,
+  func: "symbol" | "name",
+): Promise<string | null> {
+  try {
+    const scv = await callContractNoArgs(network, tokenContractId, func);
+    const plain = scValToPlainString(scv);
+    const trimmed = plain?.trim();
+    return trimmed || null;
+  } catch (e) {
+    dbg(`fetchTokenString(${func}) failed:`, (e as Error)?.message);
+    return null;
+  }
+}
+
+export interface TokenIdentity {
+  symbol: string | null;
+  name: string | null;
+}
+
+/**
+ * Resolve asset identity from a SAC / SEP-41 token contract.
+ * Soft-fails to nulls when RPC redacts retval or the call errors.
+ */
+export async function fetchTokenIdentity(
+  network: NetworkType,
+  tokenContractId: string,
+): Promise<TokenIdentity> {
+  const [symbol, name] = await Promise.all([
+    fetchTokenString(network, tokenContractId, "symbol"),
+    fetchTokenString(network, tokenContractId, "name"),
+  ]);
+  return { symbol, name };
+}
+
 /** Read token balance(owner) via simulate (read-only).
  * Returns bigint on success or null when retval is unavailable.
  * Falls back to parsing `fn_return(balance)` from events.
@@ -288,6 +339,12 @@ export async function fetchTokenBalance(
   tokenContractId: string,
   ownerAddress: string,
 ): Promise<bigint | null> {
+  const owner = ownerAddress?.trim();
+  if (!owner) {
+    dbg("fetchTokenBalance: empty owner address");
+    return null;
+  }
+
   const cfg = getNetworkConfig(network);
   const passphrase =
     cfg.networkPassphrase ??
@@ -298,7 +355,13 @@ export async function fetchTokenBalance(
   const account = new Account(source.publicKey(), String(latest.sequence));
 
   const c = new Contract(tokenContractId);
-  const scAddr = Address.fromString(ownerAddress).toScAddress();
+  let scAddr;
+  try {
+    scAddr = Address.fromString(owner).toScAddress();
+  } catch (err) {
+    dbg("fetchTokenBalance: invalid owner address", owner, err);
+    return null;
+  }
   const scvOwner = xdr.ScVal.scvAddress(scAddr);
   const op = c.call("balance", scvOwner);
 

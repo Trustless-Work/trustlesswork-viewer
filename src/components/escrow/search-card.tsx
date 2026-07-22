@@ -1,15 +1,21 @@
-import { motion } from "framer-motion";
-import { Search, ChevronRight, ExternalLink } from "lucide-react";
+import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import {
+  ArrowSquareOut,
+  DownloadIcon,
+  Flask,
+  MagnifyingGlass,
+  SpinnerGap,
+  X,
+} from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { cardVariants } from "@/utils/animations/animation-variants";
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { SectionCard } from "@/components/shared/section-card";
 import {
   getStellarLabUrl,
   getStellarExpertContractUrl,
@@ -17,6 +23,9 @@ import {
 import type { NetworkType } from "@/lib/network-config";
 import type { OrganizedEscrowData } from "@/mappers/escrow-mapper";
 import type { EscrowMap } from "@/utils/ledgerkeycontract";
+import { exportEscrowToPDF } from "@/utils/escrowExport";
+import { cn, getErrorMessage } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface SearchCardProps {
   contractId: string;
@@ -47,139 +56,222 @@ export const SearchCard = ({
   organized,
   initialEscrowId,
   currentNetwork = "testnet",
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  setShowOnlyTransactions,
 }: SearchCardProps) => {
+  const router = useRouter();
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleCloseContract = () => {
+    router.push("/");
+  };
+
+  const resolveContractId = () => {
+    const escrowIdFromData = organized?.properties?.escrow_id as
+      | string
+      | undefined;
+    return (
+      escrowIdFromData?.trim() || contractId?.trim() || initialEscrowId?.trim()
+    );
+  };
+
+  const handleExportPDF = useCallback(async () => {
+    if (!organized) {
+      toast.error("Export unavailable", {
+        description: "Load an escrow before exporting a PDF.",
+      });
+      return;
+    }
+
+    if (isExporting) return;
+
+    setIsExporting(true);
+    toast.loading("Exporting PDF", {
+      id: "escrow-pdf-export",
+      description: "Generating your escrow report.",
+    });
+
+    try {
+      await exportEscrowToPDF(organized, currentNetwork);
+      toast.success("PDF exported", {
+        id: "escrow-pdf-export",
+        description: "Your escrow report downloaded successfully.",
+      });
+    } catch (error) {
+      const message = getErrorMessage(error, "Failed to export PDF");
+      toast.error("Export failed", {
+        id: "escrow-pdf-export",
+        description: message,
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  }, [organized, currentNetwork, isExporting]);
+
   return (
-    <motion.div initial="hidden" animate="visible" variants={cardVariants}>
-      <Card
-        className={`mx-auto mb-10 border overflow-hidden ${isSearchFocused ? "border-primary/50 shadow-lg shadow-primary/10" : "border-primary/20 shadow-md"} rounded-xl transition-all duration-300 edge-accent`}
-      >
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-foreground">
-            <Search className="h-5 w-5 text-primary" />
-            Contract Lookup
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {raw && (
-            <div className="flex flex-col sm:flex-row gap-2 p-3 rounded-lg">
-              <Button
-                onClick={() => {
-                  const escrowIdFromData = organized?.properties?.escrow_id as
-                    | string
-                    | undefined;
-                  const idToUse =
-                    escrowIdFromData?.trim() ||
-                    contractId?.trim() ||
-                    initialEscrowId?.trim();
+    <SectionCard
+      title="Contract Lookup"
+      icon={MagnifyingGlass}
+      className={cn(
+        "mx-auto mb-6 transition-shadow w-full",
+        isSearchFocused && "ring-1 ring-primary/40",
+      )}
+      action={
+        raw ? (
+          <div className="flex items-center gap-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  className="rounded-full p-5"
+                  onClick={handleExportPDF}
+                  disabled={!organized || isExporting}
+                  aria-label={isExporting ? "Exporting..." : "Export to PDF"}
+                >
+                  {isExporting ? (
+                    <SpinnerGap
+                      className="animate-spin text-foreground"
+                      weight="duotone"
+                    />
+                  ) : (
+                    <DownloadIcon size={32} weight="duotone" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {isExporting ? "Exporting..." : "Export to PDF"}
+              </TooltipContent>
+            </Tooltip>
 
-                  if (!idToUse) {
-                    alert(
-                      "Error: Contract ID is required to open in Stellar Expert. Please ensure an escrow contract is loaded.",
-                    );
-                    return;
-                  }
-                  const expertWindow = window.open(
-                    getStellarExpertContractUrl(currentNetwork, idToUse),
-                    "_blank",
-                    "noopener,noreferrer",
-                  );
-                  if (!expertWindow) {
-                    alert(
-                      "Popup was blocked. Please allow popups for this site to open Stellar Expert.",
-                    );
-                  }
-                }}
-                aria-label="Open in Stellar Expert"
-                className="flex-1 min-w-0 inline-flex justify-center items-center gap-2 rounded-lg transition-all duration-200 hover:shadow-sm"
-              >
-                <ExternalLink className="h-4 w-4 shrink-0" />
-                <span className="truncate">Open in Stellar Expert</span>
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  const escrowIdFromData = organized?.properties?.escrow_id as
-                    | string
-                    | undefined;
-                  const idToUse =
-                    escrowIdFromData?.trim() ||
-                    contractId?.trim() ||
-                    initialEscrowId?.trim();
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  className="rounded-full p-5"
+                  onClick={() => {
+                    const idToUse = resolveContractId();
 
-                  if (!idToUse) {
-                    alert(
-                      "Error: Contract ID is required to open in Stellar Lab. Please ensure an escrow contract is loaded.",
+                    if (!idToUse) {
+                      toast.error("Contract ID required", {
+                        description: "Load an escrow before opening Stellar Lab.",
+                      });
+                      return;
+                    }
+                    const labWindow = window.open(
+                      getStellarLabUrl(currentNetwork, idToUse),
+                      "_blank",
+                      "noopener,noreferrer",
                     );
-                    return;
-                  }
-                  const labWindow = window.open(
-                    getStellarLabUrl(currentNetwork, idToUse),
-                    "_blank",
-                    "noopener,noreferrer",
-                  );
-                  if (!labWindow) {
-                    alert(
-                      "Popup was blocked. Please allow popups for this site to open Stellar Lab.",
+                    if (!labWindow) {
+                      toast.error("Popup blocked", {
+                        description: "Allow popups to open Stellar Lab.",
+                      });
+                    }
+                  }}
+                  aria-label="Open in Stellar Lab"
+                >
+                  <Flask className="size-4 text-foreground" weight="duotone" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Open in Stellar Lab</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  className="rounded-full p-5"
+                  onClick={() => {
+                    const idToUse = resolveContractId();
+
+                    if (!idToUse) {
+                      toast.error("Contract ID required", {
+                        description:
+                          "Load an escrow before opening Stellar Expert.",
+                      });
+                      return;
+                    }
+                    const expertWindow = window.open(
+                      getStellarExpertContractUrl(currentNetwork, idToUse),
+                      "_blank",
+                      "noopener,noreferrer",
                     );
-                  }
-                }}
-                className="flex-1 min-w-0 inline-flex justify-center items-center gap-2 rounded-lg border-primary/30 hover:bg-primary/5 hover:border-primary/50"
-                title="Open contract in Stellar Lab"
-              >
-                <ChevronRight className="h-4 w-4 shrink-0" />
-                <span className="truncate">Open in Stellar Lab</span>
-              </Button>
-            </div>
-          )}
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-grow">
-              <Input
-                type="text"
-                placeholder="Enter escrow contract ID"
-                value={contractId}
-                onChange={(e) => setContractId(e.target.value)}
-                onKeyDown={handleKeyDown}
-                onFocus={() => setIsSearchFocused(true)}
-                onBlur={() => setIsSearchFocused(false)}
-                disabled={loading}
-                className="pr-10 border-primary/30 focus:ring-2 focus:ring-primary/50 transition-all duration-200"
-              />
-            </div>
-            <Button
-              onClick={fetchEscrowData}
-              disabled={loading}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground transition-all duration-200 transform hover:scale-105 active:scale-95"
-            >
-              {loading ? (
-                <div className="flex items-center gap-2">
-                  <span className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
-                  <span>Fetching...</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1">
-                  <span>View Details</span>
-                  <ChevronRight className="h-4 w-4" />
-                </div>
-              )}
-            </Button>
+                    if (!expertWindow) {
+                      toast.error("Popup blocked", {
+                        description: "Allow popups to open Stellar Expert.",
+                      });
+                    }
+                  }}
+                  aria-label="Open in Stellar Expert"
+                >
+                  <ArrowSquareOut
+                    className="text-foreground"
+                    weight="duotone"
+                  />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Open in Stellar Expert</TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="destructive"
+                  size="icon-sm"
+                  className="rounded-full p-5"
+                  onClick={handleCloseContract}
+                  aria-label="Close"
+                >
+                  <X className="size-4" weight="bold" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Close</TooltipContent>
+            </Tooltip>
           </div>
-        </CardContent>
-        <CardFooter className="text-xs text-muted-foreground pt-0">
-          <div className="flex items-center">
-            <span>Example ID:</span>
-            <Button
-              variant="link"
-              size="sm"
-              className="text-xs text-primary p-0 pl-1 h-auto"
-              onClick={handleUseExample}
-            >
-              Click to use example
-            </Button>
-          </div>
-        </CardFooter>
-      </Card>
-    </motion.div>
+        ) : undefined
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <Input
+            type="text"
+            placeholder="Enter escrow contract ID"
+            value={contractId}
+            onChange={(e) => setContractId(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onFocus={() => setIsSearchFocused(true)}
+            onBlur={() => setIsSearchFocused(false)}
+            disabled={loading}
+            className="w-full sm:w-3/5"
+          />
+
+          <Button
+            onClick={fetchEscrowData}
+            disabled={loading}
+            size="sm"
+            className="rounded-full"
+          >
+            {loading ? (
+              <SpinnerGap className="animate-spin" weight="duotone" />
+            ) : (
+              <MagnifyingGlass weight="duotone" />
+            )}
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+          <span>Example ID:</span>
+          <Button
+            variant="link"
+            size="sm"
+            className="h-auto p-0 text-xs"
+            onClick={handleUseExample}
+          >
+            Click to use example
+          </Button>
+        </div>
+      </div>
+    </SectionCard>
   );
 };

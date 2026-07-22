@@ -97,6 +97,12 @@ export function useTokenBalance(
       setDecimals(null);
       setMismatch(false);
 
+      const owner = contractId?.trim();
+      if (!owner) {
+        dbg("no contract id; skipping live balance");
+        return;
+      }
+
       const meta = readTrustlineMeta(escrow);
       if (!meta) {
         dbg("no trustline meta found; skipping live balance");
@@ -135,58 +141,62 @@ export function useTokenBalance(
       const d = clampDecimals(dGuess);
 
       // 4) Fetch raw balance
-      const raw = await fetchTokenBalance(network, tokenCid, contractId);
-      if (raw == null) {
-        dbg("simulate returned null (retval redacted?).");
-        return;
-      }
-
-      // 5) Scale and format for display
-      const scaled = Number(raw) / Math.pow(10, d);
-      const display = scaled.toFixed(2); // UI as 2 decimals
-
-      setLedgerBalance(display);
-      setDecimals(d);
-
-      // 6) Compare vs stored balance in escrow map (if any)
-      const be = escrow?.find((e) => e.key.symbol === "balance")?.val as
-        | { i128?: string | { hi?: number; lo?: number } }
-        | undefined;
-
-      let stored: number | null = null;
-      if (be?.i128 !== undefined) {
-        let big: bigint | null = null;
-        if (typeof be.i128 === "string") {
-          try {
-            big = BigInt(be.i128);
-          } catch {
-            big = null;
-          }
-        } else if (
-          be &&
-          isI128Like(be) &&
-          be.i128 &&
-          typeof be.i128 === "object"
-        ) {
-          const bigFromParts = i128ToBigIntSafe(be);
-          big = bigFromParts;
+      try {
+        const raw = await fetchTokenBalance(network, tokenCid, owner);
+        if (raw == null) {
+          dbg("simulate returned null (retval redacted?).");
+          return;
         }
-        if (big !== null) stored = Number(big) / Math.pow(10, d);
-      }
 
-      if (stored !== null && Number.isFinite(stored)) {
-        const eps = 1 / Math.pow(10, Math.min(d, 6));
-        setMismatch(Math.abs(stored - scaled) > eps);
-      }
+        // 5) Scale and format for display
+        const scaled = Number(raw) / Math.pow(10, d);
+        const display = scaled.toFixed(2); // UI as 2 decimals
 
-      dbg("live-balance", {
-        tokenCid,
-        raw: raw.toString(),
-        decimalsRawFromMeta: meta.rawDecimals,
-        decimalsNormalized: dGuess,
-        decimalsUsed: d,
-        display,
-      });
+        setLedgerBalance(display);
+        setDecimals(d);
+
+        // 6) Compare vs stored balance in escrow map (if any)
+        const be = escrow?.find((e) => e.key.symbol === "balance")?.val as
+          | { i128?: string | { hi?: number; lo?: number } }
+          | undefined;
+
+        let stored: number | null = null;
+        if (be?.i128 !== undefined) {
+          let big: bigint | null = null;
+          if (typeof be.i128 === "string") {
+            try {
+              big = BigInt(be.i128);
+            } catch {
+              big = null;
+            }
+          } else if (
+            be &&
+            isI128Like(be) &&
+            be.i128 &&
+            typeof be.i128 === "object"
+          ) {
+            const bigFromParts = i128ToBigIntSafe(be);
+            big = bigFromParts;
+          }
+          if (big !== null) stored = Number(big) / Math.pow(10, d);
+        }
+
+        if (stored !== null && Number.isFinite(stored)) {
+          const eps = 1 / Math.pow(10, Math.min(d, 6));
+          setMismatch(Math.abs(stored - scaled) > eps);
+        }
+
+        dbg("live-balance", {
+          tokenCid,
+          raw: raw.toString(),
+          decimalsRawFromMeta: meta.rawDecimals,
+          decimalsNormalized: dGuess,
+          decimalsUsed: d,
+          display,
+        });
+      } catch (err) {
+        dbg("fetchTokenBalance failed", err);
+      }
     })();
   }, [contractId, escrow, network]);
 

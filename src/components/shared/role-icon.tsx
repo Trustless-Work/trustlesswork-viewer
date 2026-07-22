@@ -1,35 +1,22 @@
 import { ROLE_ICONS } from "@/lib/escrow-constants";
-import type { ComponentType, SVGProps } from "react";
+import type { Icon } from "@phosphor-icons/react";
 
 interface RoleIconProps {
   title: string;
   className?: string;
 }
 
-type IconType = ComponentType<SVGProps<SVGSVGElement>>;
-
 export const RoleIcon: React.FC<RoleIconProps> = ({
   title,
-  className = "w-5 h-5",
+  className = "size-4",
 }) => {
-  const roleData = (
-    ROLE_ICONS as Record<string, { icon: IconType; color: string }>
-  )[title];
-
-  if (!roleData) {
-    const FallbackIcon = ROLE_ICONS["Service Provider"].icon;
-    return (
-      <div className="text-muted-foreground">
-        <FallbackIcon className={className} />
-      </div>
-    );
-  }
-
-  const { icon: IconComponent, color } = roleData;
+  const roleData = ROLE_ICONS[title];
+  const IconComponent: Icon =
+    roleData?.icon ?? ROLE_ICONS["Service Provider"].icon;
 
   return (
-    <div className={color}>
-      <IconComponent className={className} />
+    <div className="text-foreground">
+      <IconComponent className={className} weight="duotone" />
     </div>
   );
 };

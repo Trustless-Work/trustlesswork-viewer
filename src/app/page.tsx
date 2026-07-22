@@ -1,115 +1,101 @@
 "use client";
 
-import { Inter } from "next/font/google";
 import { useState } from "react";
-import { motion } from "framer-motion";
-import Image from "next/image";
-import { NavbarSimple } from "@/components/Navbar";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { SearchCard } from "@/components/escrow/search-card";
-import { ErrorDisplay } from "@/components/escrow/error-display";
-import { EXAMPLE_CONTRACT_IDS } from "@/lib/escrow-constants";
 import type { NextPage } from "next";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { NavbarSimple } from "@/components/Navbar";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { HomeSearchCard } from "@/components/escrow/home-search-card";
+import { EXAMPLE_CONTRACT_IDS } from "@/lib/escrow-constants";
 import { useNetwork } from "@/contexts/NetworkContext";
+import {
+  escrowPath,
+  networkLabel,
+  resolveEscrow,
+  toastTitleForReason,
+} from "@/lib/resolve-escrow";
 
-const inter = Inter({ subsets: ["latin"] });
+const RESOLVE_TOAST_ID = "home-escrow-resolve";
 
 const Home: NextPage = () => {
   const router = useRouter();
-  const { currentNetwork } = useNetwork();
+  const { currentNetwork, setNetwork } = useNetwork();
   const [contractId, setContractId] = useState<string>("");
-  const [error, setError] = useState<string | null>(null);
-  const [isSearchFocused, setIsSearchFocused] = useState<boolean>(false);
-
-  // Responsive: detect mobile for SearchCard behaviour
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const handleNavigate = async () => {
-    if (!contractId) {
-      setError("Please enter a contract ID");
+    const trimmed = contractId.trim();
+    if (!trimmed) {
+      toast.error("Contract ID required", {
+        description: "Paste a Soroban contract ID to continue.",
+      });
       return;
     }
-    setError(null);
-    router.push(`/${contractId}`);
+
+    setLoading(true);
+    toast.loading("Resolving escrow", {
+      id: RESOLVE_TOAST_ID,
+      description: "Checking Testnet and Mainnet.",
+    });
+
+    try {
+      const result = await resolveEscrow(trimmed, currentNetwork);
+
+      if (!result.ok) {
+        toast.error(toastTitleForReason(result.reason), {
+          id: RESOLVE_TOAST_ID,
+          description: result.message,
+        });
+        return;
+      }
+
+      setNetwork(result.network);
+      if (result.switched) {
+        toast.info(`Switched to ${networkLabel(result.network)}`, {
+          id: RESOLVE_TOAST_ID,
+          description: "Contract found on the other network.",
+        });
+      } else {
+        toast.dismiss(RESOLVE_TOAST_ID);
+      }
+
+      router.push(escrowPath(result.network, trimmed));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") handleNavigate();
+    if (e.key === "Enter") void handleNavigate();
   };
 
   const handleUseExample = () => {
     setContractId(EXAMPLE_CONTRACT_IDS[currentNetwork]);
+    toast.info("Example loaded", {
+      description: "Press search to open the sample contract.",
+    });
   };
 
   return (
     <TooltipProvider>
-      <div
-        className={`min-h-screen bg-gradient-to-b from-gray-50 to-blue-50 dark:from-background dark:to-background ${inter.className}`}
-      >
-        <NavbarSimple />
+      <div className="bg-background">
+        <NavbarSimple showLogo={false} />
 
-        <main className="w-full sm:w-7xl container mx-auto px-4 py-12">
-          {/* HERO */}
-          <div className="relative">
-            <div className="relative bg-white/95 dark:bg-card rounded-3xl p-8 md:p-12 shadow-2xl border border-gray-200/60 dark:border-border">
-              <section className="flex flex-col-reverse md:flex-row items-center gap-8 md:gap-16">
-                {/* Left: text */}
-                <div className="flex-1 flex flex-col items-center md:items-start text-center md:text-left">
-                  <motion.h1
-                    className="text-4xl md:text-5xl font-extrabold text-foreground leading-tight"
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5 }}
-                  >
-                    Escrow Data <span className="text-primary">Viewer</span>
-                  </motion.h1>
-
-                  <motion.p
-                    className="mt-4 text-lg md:text-xl text-muted-foreground max-w-2xl"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.15, duration: 0.5 }}
-                  >
-                    View detailed information about any escrow contract on the
-                    Stellar blockchain.
-                  </motion.p>
-
-                  <div className="mt-6 w-full max-w-lg">
-                    {/* Keep the existing search card for discoverability */}
-                    <SearchCard
-                      contractId={contractId}
-                      setContractId={setContractId}
-                      loading={false}
-                      isSearchFocused={isSearchFocused}
-                      setIsSearchFocused={setIsSearchFocused}
-                      handleKeyDown={handleKeyDown}
-                      fetchEscrowData={handleNavigate}
-                      handleUseExample={handleUseExample}
-                    />
-
-                    <ErrorDisplay error={error} />
-                  </div>
-                </div>
-
-                {/* Right: image (flexes) */}
-                <motion.div
-                  className="flex-1 flex justify-center md:justify-end"
-                  initial={{ opacity: 0, scale: 0.98 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.2, duration: 0.6 }}
-                >
-                  <div className="w-full max-w-md md:max-w-xl flex items-center justify-center">
-                    <Image
-                      src="/logo.png"
-                      alt="Escrow Viewer illustration"
-                      width={350}
-                      height={350}
-                      priority
-                    />
-                  </div>
-                </motion.div>
-              </section>
-            </div>
+        <main className="flex flex-col gap-6 p-4 md:min-h-[calc(100svh-4rem)] md:px-8">
+          <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center py-8 md:py-12">
+            <HomeSearchCard
+              contractId={contractId}
+              setContractId={setContractId}
+              loading={loading}
+              isSearchFocused={isSearchFocused}
+              setIsSearchFocused={setIsSearchFocused}
+              handleKeyDown={handleKeyDown}
+              onSearch={handleNavigate}
+              onUseExample={handleUseExample}
+              currentNetwork={currentNetwork}
+            />
           </div>
         </main>
       </div>

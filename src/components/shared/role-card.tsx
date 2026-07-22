@@ -1,74 +1,66 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DetailRow } from "./detail-row";
 import { InfoTooltip } from "./info-tooltip";
+import { TruncatedText } from "./truncated-text";
 import RoleIcon from "./role-icon";
-import { motion } from "framer-motion";
+import { Skeleton } from "@/components/ui/skeleton";
 
-// Define allowed role titles explicitly
 export type RoleTitle =
+  | "Approver"
   | "Milestone Approver"
   | "Service Provider"
   | "Release Signer"
   | "Dispute Resolver"
   | "Platform Address"
   | "Receiver"
-  | (string & {}); // ← allows dynamic strings safely
+  | "Issuer"
+  | "Depositor"
+  | "Observer"
+  | (string & {});
 
 interface RoleCardProps {
   title: string;
   address: string;
   description: string;
-  tooltips: Record<string, string>;
 }
 
-export const RoleCard = ({
-  title,
-  address,
-  description,
-  tooltips,
-}: RoleCardProps) => {
-  const cardVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.3 } },
-  };
+export const RoleCardSkeleton = () => (
+  <article className="mb-4 rounded-3xl border border-border bg-card p-5 shadow-sm">
+    <div className="mb-3 flex items-center gap-3">
+      <Skeleton className="size-4 rounded-sm" />
+      <Skeleton className="h-5 w-32" />
+    </div>
+    <div className="flex flex-col gap-1 border-b border-border py-2 last:border-0 sm:flex-row sm:items-center sm:gap-3">
+      <div className="flex w-full items-center gap-1.5 sm:w-2/5">
+        <Skeleton className="h-3 w-14" />
+      </div>
+      <div className="flex w-full items-center gap-1 sm:w-3/5">
+        <Skeleton className="h-8 w-full rounded-lg" />
+        <Skeleton className="size-8 shrink-0 rounded-4xl" />
+      </div>
+    </div>
+  </article>
+);
 
+export const RoleCard = ({ title, address, description }: RoleCardProps) => {
   return (
-    <motion.div
-      variants={cardVariants}
-      whileHover={{ y: -6 }}
-      transition={{ type: "spring", stiffness: 260 }}
-    >
-      <Card className="mb-6 shadow-md hover:shadow-lg transition-shadow duration-300 rounded-xl relative hover-lift edge-accent border-primary/20 overflow-hidden">
-        {/* Top accent bar */}
-        <div className="absolute top-0 left-0 right-0 h-2 rounded-t-xl bg-primary" />
+    <article className="mb-4 min-w-0 rounded-3xl border border-border bg-card p-5 shadow-sm">
+      <div className="mb-3 flex min-w-0 items-center gap-3">
+        <RoleIcon title={title} />
+        <h3 className="flex min-w-0 flex-1 items-center gap-1.5 text-base font-semibold">
+          <TruncatedText as="span" className="font-semibold">
+            {title}
+          </TruncatedText>
+          <InfoTooltip content={description} />
+        </h3>
+      </div>
 
-        <CardHeader className="pt-4 pb-2">
-          <div className="flex items-center gap-3">
-            <motion.div
-              whileHover={{ rotate: 10 }}
-              transition={{ duration: 0.2 }}
-            >
-              <RoleIcon title={title} />
-            </motion.div>
-            <CardTitle className="text-base sm:text-lg flex items-center gap-1.5 font-bold text-card-foreground">
-              {title}
-              <InfoTooltip content={description} />
-            </CardTitle>
-          </div>
-        </CardHeader>
-
-        <CardContent className="pt-2">
-          <DetailRow
-            label="Address"
-            value={address}
-            tooltip={
-              tooltips.address || "Blockchain address assigned to this role"
-            }
-            canCopy={true}
-            isAddress={true}
-          />
-        </CardContent>
-      </Card>
-    </motion.div>
+      <DetailRow
+        label="Address"
+        value={address}
+        canCopy
+        isAddress
+        addressChars={6}
+      />
+    </article>
   );
 };

@@ -1,65 +1,89 @@
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { LiveStatusDot } from "@/components/shared/live-status-dot";
+import { TruncatedText } from "@/components/shared/truncated-text";
+import { CheckCircle, WarningCircle } from "@phosphor-icons/react";
 
 interface StatusBadgeProps {
   status: "true" | "false" | "pending" | "approved" | "completed" | string;
   type?: "dispute" | "release" | "resolve" | "milestone";
 }
 
+/**
+ * Flag badges (dispute / release / resolve) should only be rendered when the
+ * flag is true — callers gate on that. Milestone status is always shown and
+ * is independent of approval / flags.
+ *
+ * Variants: approved / released / resolved → success; dispute → destructive;
+ * everything else → outline.
+ */
 export const StatusBadge = ({
   status,
   type = "milestone",
 }: StatusBadgeProps) => {
-  const lowerStatus = status.toString().toLowerCase();
+  const lowerStatus = status.toString().toLowerCase().trim();
+
+  if (type === "dispute") {
+    return (
+      <Badge variant="destructive">
+        <WarningCircle weight="duotone" /> Disputed
+      </Badge>
+    );
+  }
+
+  if (type === "release") {
+    return (
+      <Badge variant="success">
+        <CheckCircle weight="duotone" /> Released
+      </Badge>
+    );
+  }
+
+  if (type === "resolve") {
+    return (
+      <Badge variant="success">
+        <CheckCircle weight="duotone" /> Resolved
+      </Badge>
+    );
+  }
+
+  if (lowerStatus === "approved") {
+    return (
+      <Badge variant="success">
+        <CheckCircle weight="duotone" /> Approved
+      </Badge>
+    );
+  }
+
+  if (lowerStatus === "completed") {
+    return (
+      <Badge variant="outline">
+        <CheckCircle weight="duotone" /> Completed
+      </Badge>
+    );
+  }
+
+  if (lowerStatus === "pending" || lowerStatus === "") {
+    return (
+      <Badge variant="outline">
+        <WarningCircle weight="duotone" /> Pending
+      </Badge>
+    );
+  }
 
   if (lowerStatus === "true") {
-    let text = "Active";
-    const icon = <CheckCircle size={14} className="mr-1" />;
-
-    if (type === "dispute") text = "Disputed";
-    if (type === "release") text = "Released";
-    if (type === "resolve") text = "Resolved";
-
     return (
-      <Badge className="bg-primary hover:bg-primary/90 text-primary-foreground">
-        {icon} {text}
+      <Badge variant="outline">
+        <LiveStatusDot /> Active
       </Badge>
     );
   }
 
-  if (lowerStatus === "approved" || lowerStatus === "completed") {
-    return (
-      <Badge className="bg-green-600 dark:bg-green-500 hover:bg-green-700 dark:hover:bg-green-400 text-white">
-        <CheckCircle size={14} className="mr-1" />{" "}
-        {lowerStatus === "approved" ? "Approved" : "Completed"}
-      </Badge>
-    );
-  }
-
-  if (lowerStatus === "pending") {
-    return (
-      <Badge
-        variant="outline"
-        className="text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-600"
-      >
-        <AlertCircle size={14} className="mr-1" /> Pending
-      </Badge>
-    );
-  }
-
-  if (lowerStatus === "false") {
-    let text = "Inactive";
-
-    if (type === "dispute") text = "Not Disputed";
-    if (type === "release") text = "Not Released";
-    if (type === "resolve") text = "Not Resolved";
-
-    return (
-      <Badge variant="outline" className="text-muted-foreground border-border">
-        <XCircle size={14} className="mr-1" /> {text}
-      </Badge>
-    );
-  }
-
-  return <Badge variant="secondary">{lowerStatus}</Badge>;
+  // Free-form Service Provider status — preserve original casing, clamp length
+  return (
+    <Badge variant="outline" className="max-w-[12rem] min-w-0 normal-case">
+      <TruncatedText as="span" className="max-w-[11rem] text-xs font-medium">
+        {status}
+      </TruncatedText>
+    </Badge>
+  );
 };

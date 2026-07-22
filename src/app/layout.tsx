@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { Suspense } from "react";
 import { NetworkProvider } from "@/contexts/NetworkContext";
+import { IconProvider } from "@/components/providers/icon-provider";
+import { AppShellSkeleton } from "@/components/shared/app-shell-skeleton";
+import { Toaster } from "@/components/ui/sonner";
 
 // Work around Node.js experimental localStorage mismatch in dev server
 // (prevents Next dev overlay from crashing when localStorage is non-standard)
@@ -22,9 +25,10 @@ if (typeof window === "undefined") {
   }
 }
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
+  display: "swap",
+  variable: "--font-space-grotesk",
 });
 
 const geistMono = Geist_Mono({
@@ -32,15 +36,13 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Prevent hydration errors from extensions - adding attributes to the body
 export const metadata: Metadata = {
   metadataBase: new URL("https://localhost:3000"),
-  title: "Escrow Data Viewer",
+  title: "Escrow Viewer",
   description:
     "View detailed information about escrow contracts on the Stellar blockchain.",
 };
 
-// Suppress hydration warnings in development
 const customBodyProps =
   process.env.NODE_ENV === "development"
     ? { suppressHydrationWarning: true }
@@ -52,13 +54,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${spaceGrotesk.variable} ${geistMono.variable} font-sans antialiased`}
         {...customBodyProps}
       >
-        <Suspense fallback={<div>Loading...</div>}>
-          <NetworkProvider>{children}</NetworkProvider>
+        <Suspense fallback={<AppShellSkeleton />}>
+          <NetworkProvider>
+            <IconProvider>
+              <div className="flex min-h-screen flex-col bg-background">
+                <div className="flex-1">{children}</div>
+              </div>
+              <Toaster closeButton={false} />
+            </IconProvider>
+          </NetworkProvider>
         </Suspense>
       </body>
     </html>
