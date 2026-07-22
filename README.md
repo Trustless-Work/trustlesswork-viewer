@@ -1,5 +1,5 @@
 ````md
-# 🔐 Trustless Work - Escrow Data Viewer
+# 🔐 Trustless Work - Escrow Viewer
 
 A decentralized, read-only viewer for Soroban-based escrow contracts on the Stellar blockchain. This tool lets anyone inspect an escrow contract by its ID—displaying milestones, participants, roles, balances, and statuses in a clean and transparent UI.
 
@@ -10,7 +10,7 @@ Built with **Next.js 14**, **TailwindCSS**, and **ShadCN UI**. Fully responsive,
 ## 🚀 Features
 
 - 🔎 **Search Escrow Contracts** – Enter a Soroban contract ID and load organized escrow data.
-- 👤 **Role Breakdown** – View roles such as Milestone Approver, Signer, Receiver, Service Provider—each with tooltip explanations.
+- 👤 **Role Breakdown** – View roles such as Approver, Release Signer, Receiver, Service Provider—each with tooltip explanations aligned to Trustless Work docs.
 - 🧩 **Milestones** – Detailed milestone cards with approval states, amounts, descriptions, flags, and progress.
 - 💰 **Live Token Balance** – Gets real-time balance from the token contract (if applicable).
 - 📦 **Properties** – All escrow metadata (properties & flags) displayed clearly for auditing.
