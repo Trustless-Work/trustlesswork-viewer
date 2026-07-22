@@ -1,8 +1,10 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "./status-badge";
-import { InfoTooltip } from "./info-tooltip";
 import { DetailRow } from "./detail-row";
-import { motion } from "framer-motion";
+import { TruncatedText } from "./truncated-text";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ADDRESS_CHARS } from "@/lib/format-address";
+import { ROLE_PERMISSIONS } from "@/lib/escrow-constants";
+import { MoneyStat } from "@/components/shared/UsdcAmount";
 
 interface MilestoneProps {
   index: number;
@@ -10,8 +12,9 @@ interface MilestoneProps {
   description: string;
   status: string;
   approved: boolean;
-  tooltips: { [key: string]: string };
   amount?: string;
+  /** Escrow asset code — USDC amounts render with the USDC icon. */
+  assetSymbol?: string | null;
   release_flag?: boolean;
   dispute_flag?: boolean;
   resolved_flag?: boolean;
@@ -20,14 +23,38 @@ interface MilestoneProps {
   receiver?: string;
 }
 
+export const MilestoneCardSkeleton = () => (
+  <article className="mb-4 min-h-0 rounded-3xl border border-border bg-card p-5 shadow-sm">
+    <div className="mb-3 flex items-start justify-between gap-3">
+      <Skeleton className="h-5 w-40" />
+      <div className="flex flex-wrap justify-end gap-1.5">
+        <Skeleton className="h-5 w-20 rounded-4xl" />
+        <Skeleton className="h-5 w-20 rounded-4xl" />
+      </div>
+    </div>
+
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-5/6" />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Skeleton className="h-3 w-14" />
+        <Skeleton className="h-5 w-28" />
+      </div>
+    </div>
+  </article>
+);
+
 export const MilestoneCard = ({
   index,
   title,
   description,
   status,
   approved,
-  tooltips,
   amount,
+  assetSymbol,
   release_flag,
   dispute_flag,
   resolved_flag,
@@ -35,126 +62,80 @@ export const MilestoneCard = ({
   approver,
   receiver,
 }: MilestoneProps) => {
-  const cardVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.3 } },
-  };
-
   return (
-    <motion.div
-      variants={cardVariants}
-      whileHover={{ y: -6, scale: 1.01 }}
-      transition={{ type: "spring", stiffness: 300 }}
-    >
-      <Card
-        className={`mb-6 shadow-md hover:shadow-lg transition-shadow duration-300 rounded-xl relative hover-lift edge-accent overflow-hidden
-    ${approved ? "border-green-200 dark:border-green-700/50" : "border-amber-200 dark:border-amber-700/50"}`}
-      >
-        <div
-          className={`absolute top-0 left-0 right-0 h-2 rounded-t-xl ${approved ? "bg-green-500" : "bg-amber-500"}`}
-        />
-        <CardHeader className="pt-4 pb-2">
-          <div className="flex justify-between items-center">
-            <CardTitle className="text-base sm:text-lg flex items-center gap-1.5 font-bold text-card-foreground">
-              {title || `Milestone ${index + 1}`}
-              <InfoTooltip
-                content={tooltips.milestone_title || "Title of the milestone"}
+    <article className="mb-4 min-h-0 rounded-3xl border border-border bg-card p-5 shadow-sm">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <TruncatedText
+          as="h3"
+          lines={2}
+          className="min-w-0 flex-1 text-base font-semibold"
+        >
+          {title || `Milestone ${index + 1}`}
+        </TruncatedText>
+        <div className="flex max-w-[60%] shrink-0 flex-wrap items-center justify-end gap-1.5">
+          {/* Status is always shown — independent of approval / flags */}
+          <StatusBadge status={status || "Pending"} type="milestone" />
+          {approved ? <StatusBadge status="approved" /> : null}
+          {dispute_flag ? (
+            <StatusBadge status="true" type="dispute" />
+          ) : null}
+          {release_flag ? (
+            <StatusBadge status="true" type="release" />
+          ) : null}
+          {resolved_flag ? (
+            <StatusBadge status="true" type="resolve" />
+          ) : null}
+        </div>
+      </div>
+
+      <div className="flex min-w-0 flex-col gap-3">
+        <TruncatedText as="p" lines={4} className="text-sm">
+          {description}
+        </TruncatedText>
+
+        {amount ? (
+          <MoneyStat
+            label="Amount"
+            value={amount}
+            symbol={assetSymbol}
+            size="lg"
+            emphasis={false}
+          />
+        ) : null}
+
+        {(receiver || signer || approver) && (
+          <div className="flex flex-col gap-1">
+            {receiver && (
+              <DetailRow
+                label="Receiver"
+                value={receiver}
+                tooltip={ROLE_PERMISSIONS.Receiver}
+                canCopy
+                isAddress
+                addressChars={ADDRESS_CHARS.md}
               />
-            </CardTitle>
-            <StatusBadge status={approved ? "approved" : status} />
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-1">
-            <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-1">
-              <span className="font-medium">Description</span>
-              <InfoTooltip
-                content={
-                  tooltips.milestone_description ||
-                  "Details of the milestone's deliverable"
-                }
+            )}
+            {signer && (
+              <DetailRow
+                label="Signer"
+                value={signer}
+                canCopy
+                isAddress
+                addressChars={ADDRESS_CHARS.md}
               />
-            </div>
-            <p className="text-card-foreground text-base">{description}</p>
-
-            {amount && (
-              <div className="flex items-center gap-2 text-sm mt-2">
-                <span className="font-medium">Amount:</span>
-                <span className="text-primary">{amount}</span>
-              </div>
             )}
-
-            {(release_flag !== undefined ||
-              dispute_flag !== undefined ||
-              resolved_flag !== undefined) && (
-              <div className="flex flex-wrap gap-2 mt-2 text-xs">
-                {release_flag !== undefined && (
-                  <span
-                    className={`px-2 py-0.5 rounded ${release_flag ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}
-                  >
-                    Release: {release_flag ? "Yes" : "No"}
-                  </span>
-                )}
-                {dispute_flag !== undefined && (
-                  <span
-                    className={`px-2 py-0.5 rounded ${dispute_flag ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"}`}
-                  >
-                    Dispute: {dispute_flag ? "Yes" : "No"}
-                  </span>
-                )}
-                {resolved_flag !== undefined && (
-                  <span
-                    className={`px-2 py-0.5 rounded ${resolved_flag ? "bg-green-100 dark:bg-green-500/20 text-green-700 dark:text-green-300" : "bg-muted text-muted-foreground"}`}
-                  >
-                    Resolved: {resolved_flag ? "Yes" : "No"}
-                  </span>
-                )}
-              </div>
-            )}
-
-            {(receiver || signer || approver) && (
-              <div className="mt-3">
-                {receiver && (
-                  <DetailRow
-                    label="Receiver"
-                    value={receiver}
-                    tooltip={
-                      tooltips.milestone_receiver ||
-                      "Address that receives the funds for this milestone."
-                    }
-                    canCopy
-                    isAddress
-                  />
-                )}
-                {signer && (
-                  <DetailRow
-                    label="Signer"
-                    value={signer}
-                    tooltip={
-                      tooltips.milestone_signer ||
-                      "Address authorized to release this milestone."
-                    }
-                    canCopy
-                    isAddress
-                  />
-                )}
-                {approver && (
-                  <DetailRow
-                    label="Approver"
-                    value={approver}
-                    tooltip={
-                      tooltips.milestone_approver ||
-                      "Address that approves this milestone."
-                    }
-                    canCopy
-                    isAddress
-                  />
-                )}
-              </div>
+            {approver && (
+              <DetailRow
+                label="Approver"
+                value={approver}
+                canCopy
+                isAddress
+                addressChars={ADDRESS_CHARS.md}
+              />
             )}
           </div>
-        </CardContent>
-      </Card>
-    </motion.div>
+        )}
+      </div>
+    </article>
   );
 };

@@ -1,19 +1,24 @@
 "use client";
 
-import { Inter } from "next/font/google";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { motion } from "framer-motion";
+import { toast } from "sonner";
 import { NavbarSimple } from "@/components/Navbar";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { LoadingLogo } from "@/components/shared/loading-logo";
+import { Button } from "@/components/ui/button";
 import { EXAMPLE_CONTRACT_IDS } from "@/lib/escrow-constants";
 import { useRouter } from "next/navigation";
 import { useNetwork } from "@/contexts/NetworkContext";
 import { getErrorMessage } from "@/lib/utils";
+import type { NetworkType } from "@/lib/network-config";
+import {
+  escrowPath,
+  networkLabel,
+  resolveEscrow,
+  toastTitleForReason,
+} from "@/lib/resolve-escrow";
 
 import { Header } from "@/components/escrow/header";
 import { SearchCard } from "@/components/escrow/search-card";
-import { ErrorDisplay } from "@/components/escrow/error-display";
 import { EscrowContent } from "@/components/escrow/escrow-content";
 import { TransactionTable } from "@/components/escrow/TransactionTable";
 import { TransactionDetailModal } from "@/components/escrow/TransactionDetailModal";
@@ -25,58 +30,69 @@ import {
 import { LedgerBalancePanel } from "@/components/escrow/LedgerBalancePanel";
 import { useIsMobile } from "@/hooks/useIsMobile";
 
-// ⬇️ New hooks
 import { useEscrowData } from "@/hooks/useEscrowData";
+import { useEnrichedTrustline } from "@/hooks/useEnrichedTrustline";
 import { useTokenBalance } from "@/hooks/useTokenBalance";
-// (useMemo is consolidated in the import above)
 
-const inter = Inter({ subsets: ["latin"] });
+const DEBUG = process.env.NODE_ENV !== "production";
+const RESOLVE_TOAST_ID = "escrow-resolve";
 
 interface EscrowDetailsClientProps {
   initialEscrowId: string;
+  initialNetwork: NetworkType;
 }
-
-// === DEBUG LOGGING (EscrowDetails) ===
-const DEBUG = process.env.NODE_ENV !== "production";
 
 const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
   initialEscrowId,
+  initialNetwork,
 }) => {
   const router = useRouter();
-  const { currentNetwork } = useNetwork();
+  const { currentNetwork, setNetwork } = useNetwork();
 
-  // Input / responsive state
   const [contractId, setContractId] = useState<string>(initialEscrowId);
+  const [resolving, setResolving] = useState(false);
   const isMobile = useIsMobile();
   const [isSearchFocused, setIsSearchFocused] = useState<boolean>(false);
+  const autoSwitchAttempted = useRef(false);
 
-  // Escrow data hook (raw + organized)
+  // URL is source of truth for network on this page
+  useEffect(() => {
+    if (currentNetwork !== initialNetwork) {
+      setNetwork(initialNetwork);
+    }
+  }, [initialNetwork, currentNetwork, setNetwork]);
+
+  useEffect(() => {
+    setContractId(initialEscrowId);
+    autoSwitchAttempted.current = false;
+  }, [initialEscrowId, initialNetwork]);
+
   const { raw, organized, loading, error, refresh } = useEscrowData(
-    contractId,
-    currentNetwork,
-    isMobile,
+    initialEscrowId,
+    initialNetwork,
   );
 
-  // Live token balance hook
   const { ledgerBalance, decimals, mismatch } = useTokenBalance(
-    contractId,
+    initialEscrowId,
     raw,
-    currentNetwork,
+    initialNetwork,
   );
+
+  const { trustline: enrichedTrustline, loading: trustlineLoading } =
+    useEnrichedTrustline(organized?.trustline, initialNetwork);
 
   const organizedWithLive = useMemo(() => {
     if (!organized) return null;
-    if (!ledgerBalance) return organized; // nothing to override
     return {
       ...organized,
+      trustline: enrichedTrustline,
       properties: {
         ...organized.properties,
-        balance: ledgerBalance, // <- replace storage balance with live one
+        ...(ledgerBalance ? { balance: ledgerBalance } : {}),
       },
     };
-  }, [organized, ledgerBalance]);
+  }, [organized, ledgerBalance, enrichedTrustline]);
 
-  // Transaction-related state (kept here for now)
   const [transactions, setTransactions] = useState<TransactionMetadata[]>([]);
   const [transactionLoading, setTransactionLoading] = useState<boolean>(false);
   const [transactionError, setTransactionError] = useState<string | null>(null);
@@ -88,7 +104,6 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
     useState<boolean>(false);
   const txRef = useRef<HTMLDivElement | null>(null);
 
-  // Fetch transaction data
   const fetchTransactionData = useCallback(
     async (id: string, cursor?: string) => {
       if (!id) return;
@@ -103,9 +118,11 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
           setTransactions(response.transactions);
         }
       } catch (err: unknown) {
-        // ✅ Replaced (err: any) with safe unknown error handling
         const message = getErrorMessage(err, "Failed to fetch transactions");
         setTransactionError(message);
+        toast.error("Transactions failed", {
+          description: message,
+        });
       } finally {
         setTransactionLoading(false);
       }
@@ -113,44 +130,138 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
     [],
   );
 
-  // Initial + network-change fetch (escrow + txs)
   useEffect(() => {
-    if (!contractId) return;
-    // useEscrowData auto-refreshes on contractId change; just ensure txs loaded:
-    fetchTransactionData(contractId);
-  }, [contractId, currentNetwork, fetchTransactionData]);
+    if (!initialEscrowId) return;
+    fetchTransactionData(initialEscrowId);
+  }, [initialEscrowId, initialNetwork, fetchTransactionData]);
 
-  // Enter key in search
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      // If same contractId, force refresh; if different we also push new URL
-      if (contractId !== initialEscrowId) {
-        router.push(`/${contractId}`);
+  // Auto-switch / bail out when the URL network has no valid escrow
+  useEffect(() => {
+    if (loading || organized || autoSwitchAttempted.current) return;
+    if (!error) return;
+
+    autoSwitchAttempted.current = true;
+    let cancelled = false;
+
+    async function recover() {
+      setResolving(true);
+      try {
+        const result = await resolveEscrow(initialEscrowId, initialNetwork);
+        if (cancelled) return;
+
+        if (result.ok && result.network !== initialNetwork) {
+          setNetwork(result.network);
+          toast.info(`Switched to ${networkLabel(result.network)}`, {
+            description: "Contract found on the other network.",
+          });
+          router.replace(escrowPath(result.network, initialEscrowId));
+          return;
+        }
+
+        if (result.ok) {
+          await refresh();
+          return;
+        }
+
+        toast.error(toastTitleForReason(result.reason), {
+          description: result.message,
+        });
+        router.replace("/");
+      } finally {
+        if (!cancelled) setResolving(false);
       }
-      void refresh();
-      fetchTransactionData(contractId);
     }
+
+    void recover();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    loading,
+    organized,
+    error,
+    initialEscrowId,
+    initialNetwork,
+    router,
+    setNetwork,
+    refresh,
+  ]);
+
+  const navigateToResolved = useCallback(
+    async (id: string) => {
+      const trimmed = id.trim();
+      if (!trimmed) {
+        toast.error("Contract ID required", {
+          description: "Paste a Soroban contract ID to continue.",
+        });
+        return;
+      }
+
+      setResolving(true);
+      toast.loading("Resolving escrow", {
+        id: RESOLVE_TOAST_ID,
+        description: "Checking Testnet and Mainnet.",
+      });
+
+      try {
+        const result = await resolveEscrow(trimmed, initialNetwork);
+
+        if (!result.ok) {
+          toast.error(toastTitleForReason(result.reason), {
+            id: RESOLVE_TOAST_ID,
+            description: result.message,
+          });
+          return;
+        }
+
+        setNetwork(result.network);
+        if (result.switched) {
+          toast.info(`Switched to ${networkLabel(result.network)}`, {
+            id: RESOLVE_TOAST_ID,
+            description: "Contract found on the other network.",
+          });
+        } else {
+          toast.dismiss(RESOLVE_TOAST_ID);
+        }
+
+        if (
+          result.network === initialNetwork &&
+          trimmed === initialEscrowId
+        ) {
+          await refresh();
+          fetchTransactionData(trimmed);
+        } else {
+          router.push(escrowPath(result.network, trimmed));
+        }
+      } finally {
+        setResolving(false);
+      }
+    },
+    [
+      initialNetwork,
+      initialEscrowId,
+      setNetwork,
+      refresh,
+      fetchTransactionData,
+      router,
+    ],
+  );
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") void navigateToResolved(contractId);
   };
 
-  // Example ID
   const handleUseExample = () => {
-    const id = EXAMPLE_CONTRACT_IDS[currentNetwork];
+    const id = EXAMPLE_CONTRACT_IDS[initialNetwork];
     setContractId(id);
-    router.push(`/${id}`);
-    // hook will refresh automatically on state change; txs too via effect
+    void navigateToResolved(id);
   };
 
-  // Fetch button click
   const handleFetch = async () => {
-    if (!contractId) return;
-    if (contractId !== initialEscrowId) {
-      router.push(`/${contractId}`);
-    }
-    await refresh();
-    fetchTransactionData(contractId);
+    await navigateToResolved(contractId);
   };
 
-  // Transactions UI handlers
   const handleTransactionClick = (txHash: string) => {
     setSelectedTxHash(txHash);
     setIsModalOpen(true);
@@ -160,12 +271,11 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
     setSelectedTxHash(null);
   };
   const handleLoadMoreTransactions = () => {
-    if (transactionResponse?.cursor && contractId) {
-      fetchTransactionData(contractId, transactionResponse.cursor);
+    if (transactionResponse?.cursor && initialEscrowId) {
+      fetchTransactionData(initialEscrowId, transactionResponse.cursor);
     }
   };
 
-  // When user toggles to show transactions, scroll the section into view
   useEffect(() => {
     if (showOnlyTransactions && txRef.current) {
       try {
@@ -176,13 +286,11 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
     }
   }, [showOnlyTransactions]);
 
-  // === DEBUG LOGGING (EscrowDetails) ===
-
   useEffect(() => {
     if (!DEBUG) return;
-    console.log("[DBG][EscrowDetails] network:", currentNetwork);
-    console.log("[DBG][EscrowDetails] contractId:", contractId);
-  }, [currentNetwork, contractId]);
+    console.log("[DBG][EscrowDetails] network:", initialNetwork);
+    console.log("[DBG][EscrowDetails] contractId:", initialEscrowId);
+  }, [initialNetwork, initialEscrowId]);
 
   useEffect(() => {
     if (!DEBUG) return;
@@ -203,36 +311,22 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
     });
   }, [ledgerBalance, decimals, mismatch]);
 
+  const busy = loading || resolving;
+
   return (
     <TooltipProvider>
-      <div
-        className={`min-h-screen bg-linear-to-b from-gray-50 to-blue-50 dark:from-background dark:to-background ${inter.className}`}
-      >
+      <div className="bg-background">
         <NavbarSimple />
 
-        <main className="container mx-auto px-4 py-6 md:py-10 max-w-7xl">
-          {/* Header Section */}
-          <Header />
+        <main className="flex flex-col gap-6 p-4 md:px-8">
+          <div className="mx-auto w-full max-w-5xl">
+            <Header />
 
-          {/* Logo display (only on initial screen) */}
-          {!raw && !loading && !error && (
-            <motion.div
-              className="flex justify-center mb-8"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2, duration: 0.5 }}
-            >
-              <LoadingLogo loading={false} />
-            </motion.div>
-          )}
-
-          {/* Search Card + View Transactions button (flexed together) */}
-          {!showOnlyTransactions && (
-            <div className="max-w-5xl mx-auto  flex-col md:flex-row items-start md:items-center gap-4 mb-6">
+            {!showOnlyTransactions && (
               <SearchCard
                 contractId={contractId}
                 setContractId={setContractId}
-                loading={loading}
+                loading={busy}
                 isSearchFocused={isSearchFocused}
                 setIsSearchFocused={setIsSearchFocused}
                 handleKeyDown={handleKeyDown}
@@ -241,106 +335,74 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
                 raw={raw}
                 organized={organized}
                 initialEscrowId={initialEscrowId}
-                currentNetwork={currentNetwork}
+                currentNetwork={initialNetwork}
                 setShowOnlyTransactions={setShowOnlyTransactions}
               />
-            </div>
-          )}
+            )}
 
-          {/* Error Display */}
-          <ErrorDisplay error={error} />
+            {!showOnlyTransactions && (
+              <EscrowContent
+                loading={busy}
+                organized={error ? null : organizedWithLive}
+                trustlineLoading={trustlineLoading}
+                isMobile={isMobile}
+                error={error}
+              />
+            )}
 
-          {/* Content Section (hidden when showing transactions as a page) */}
-          {!showOnlyTransactions && (
-            <EscrowContent
-              loading={loading}
-              organized={organizedWithLive}
-              isMobile={isMobile}
-              error={error} 
-            />
-          )}
+            {!showOnlyTransactions && raw && ledgerBalance && !error && (
+              <LedgerBalancePanel
+                balance={ledgerBalance}
+                symbol={enrichedTrustline.assetCode}
+                decimals={decimals}
+                mismatch={mismatch}
+              />
+            )}
 
-          {/* Live ledger balance (from token contract) */}
-          {!showOnlyTransactions && raw && ledgerBalance && (
-            <LedgerBalancePanel
-              balance={ledgerBalance}
-              decimals={decimals}
-              mismatch={mismatch}
-            />
-          )}
-
-          {/* Transaction History Section (renders only when requested) */}
-          {raw && showOnlyTransactions && (
-            <motion.div
-              ref={txRef}
-              className="mt-6"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1, duration: 0.4 }}
-            >
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl md:text-3xl font-bold">
-                  Transaction History
-                </h2>
-                <div className="flex items-center gap-2">
-                  <button
+            {raw && !error && showOnlyTransactions && (
+              <div ref={txRef} className="mt-2 flex flex-col gap-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-col gap-1">
+                    <h2 className="text-lg font-semibold tracking-tight md:text-xl">
+                      Transaction History
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Complete blockchain activity record for this escrow
+                      contract
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => setShowOnlyTransactions(false)}
                     aria-label="Back to details"
-                    className="px-3 py-2 rounded-md bg-primary/10 text-primary font-semibold border border-primary/20 hover:bg-primary/20 cursor-pointer text-sm"
                   >
                     Back to Details
-                  </button>
+                  </Button>
                 </div>
-              </div>
 
-              <div className="mb-4">
-                <p className="text-sm text-muted-foreground">
-                  Complete blockchain activity record for this escrow contract
-                </p>
-              </div>
-
-              <div>
-                <motion.div
-                  className="relative"
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.05, duration: 0.4 }}
-                >
-                  <motion.div
-                    className="absolute inset-0 bg-gradient-to-br from-blue-50/30 via-transparent to-purple-50/30 dark:from-primary/5 dark:to-accent/5 rounded-3xl -z-10"
-                    animate={{
-                      backgroundPosition: ["0% 0%", "100% 100%", "0% 0%"],
-                    }}
-                    transition={{
-                      duration: 25,
-                      repeat: Infinity,
-                      ease: "linear",
-                    }}
+                <section className="rounded-3xl border border-border bg-card p-4 sm:p-6">
+                  <TransactionTable
+                    transactions={transactions}
+                    loading={transactionLoading}
+                    error={transactionError}
+                    retentionNotice={transactionResponse?.retentionNotice}
+                    hasMore={transactionResponse?.hasMore || false}
+                    onLoadMore={handleLoadMoreTransactions}
+                    onTransactionClick={handleTransactionClick}
+                    isMobile={isMobile}
                   />
-                  <div className="relative bg-white/95 dark:bg-card backdrop-blur-sm rounded-3xl shadow-2xl border border-gray-200/60 dark:border-border overflow-hidden hover:shadow-3xl transition-all duration-700">
-                    <TransactionTable
-                      transactions={transactions}
-                      loading={transactionLoading}
-                      error={transactionError}
-                      retentionNotice={transactionResponse?.retentionNotice}
-                      hasMore={transactionResponse?.hasMore || false}
-                      onLoadMore={handleLoadMoreTransactions}
-                      onTransactionClick={handleTransactionClick}
-                      isMobile={isMobile}
-                    />
-                  </div>
-                </motion.div>
+                </section>
               </div>
-            </motion.div>
-          )}
+            )}
 
-          {/* Transaction Detail Modal */}
-          <TransactionDetailModal
-            txHash={selectedTxHash}
-            isOpen={isModalOpen}
-            onClose={handleModalClose}
-            isMobile={isMobile}
-          />
+            <TransactionDetailModal
+              txHash={selectedTxHash}
+              isOpen={isModalOpen}
+              onClose={handleModalClose}
+              isMobile={isMobile}
+            />
+          </div>
         </main>
       </div>
     </TooltipProvider>

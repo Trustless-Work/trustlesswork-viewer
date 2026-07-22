@@ -1,4 +1,4 @@
-import { CheckCircle, Circle } from "lucide-react";
+import { CheckCircle, Circle } from "@phosphor-icons/react";
 
 interface ProgressBarProps {
   value: number;
@@ -18,42 +18,39 @@ export const ProgressBar = ({
   const percentage = Math.round(value);
 
   return (
-    <div className="space-y-2">
-      <div className="flex justify-between items-center text-sm">
-        <span className="text-muted-foreground font-medium">{label}</span>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between text-sm">
+        <span className="font-medium text-muted-foreground">{label}</span>
         {showPercentage && (
           <span className="font-semibold text-primary">{percentage}%</span>
         )}
       </div>
 
       <div className="relative">
-        {/* Base progress track */}
-        <div className="h-2.5 bg-muted rounded-full overflow-hidden">
+        <div className="h-1 overflow-hidden rounded-full bg-muted">
           <div
-            className="h-full bg-gradient-to-r from-primary to-primary/80 rounded-full transition-all duration-700 ease-in-out"
+            className="h-full rounded-full bg-primary transition-all duration-700 ease-in-out"
             style={{ width: `${value}%` }}
           />
         </div>
 
-        {/* Steps indicators (optional) */}
         {showSteps && (
-          <div className="flex justify-between absolute -top-0 inset-x-0 px-1">
+          <div className="absolute inset-x-0 -top-0 flex justify-between px-1">
             {Array.from({ length: steps }).map((_, index) => {
               const stepPercentage = (index / (steps - 1)) * 100;
               const isCompleted = value >= stepPercentage;
 
               return (
-                // biome-ignore lint/suspicious/noArrayIndexKey: <explanation>
-                <div key={index} className={"flex flex-col items-center -mt-3"}>
+                <div key={index} className="-mt-3 flex flex-col items-center">
                   {isCompleted ? (
                     <CheckCircle
-                      size={16}
-                      className="text-primary bg-background rounded-full"
+                      className="size-4 rounded-full bg-background text-foreground"
+                      weight="duotone"
                     />
                   ) : (
                     <Circle
-                      size={16}
-                      className="text-muted-foreground bg-background rounded-full"
+                      className="size-4 rounded-full bg-background text-foreground"
+                      weight="duotone"
                     />
                   )}
                 </div>

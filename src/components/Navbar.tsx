@@ -1,32 +1,38 @@
 "use client";
 
-import { Inter } from "next/font/google";
 import Image from "next/image";
 import React from "react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { NetworkToggle } from "@/components/shared/network-toggle";
+import { cn } from "@/lib/utils";
 
-const inter = Inter({ subsets: ["latin"] });
+interface NavbarSimpleProps {
+  showLogo?: boolean;
+}
 
-export function NavbarSimple() {
+export function NavbarSimple({ showLogo = true }: NavbarSimpleProps) {
   return (
-    <header
-      className={`flex items-center justify-between gap-4 rounded shadow-sm py-4 px-6 md:px-28 ${inter.className}`}
-    >
-      <div className="flex items-center gap-3">
-        <Image
-          src="/logo.png"
-          alt="Trustless work logo"
-          width={27}
-          height={10}
-          priority
-        />
-        <h1 className="text-base font-bold">Trustless Work</h1>
-      </div>
+    <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-md">
+      <div
+        className={cn(
+          "flex h-14 items-center gap-4 px-3 md:h-16 md:px-8",
+          showLogo ? "justify-between" : "justify-end",
+        )}
+      >
+        {showLogo ? (
+          <Image
+            src="/logo.png"
+            alt="Trustless Work logo"
+            width={50}
+            height={50}
+            priority
+          />
+        ) : null}
 
-      <div className="flex items-center gap-3">
-        <NetworkToggle />
-        <ThemeToggle />
+        <div className="flex items-center gap-3">
+          <NetworkToggle />
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );

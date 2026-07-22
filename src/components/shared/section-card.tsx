@@ -1,45 +1,37 @@
 import type { ReactNode } from "react";
-import { motion } from "framer-motion";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { cardVariants } from "@/utils/animations/animation-variants";
-import type { LucideIcon } from "lucide-react";
+import type { Icon } from "@phosphor-icons/react";
+import { cn } from "@/lib/utils";
 
 interface SectionCardProps {
   title: string;
-  icon: LucideIcon;
+  icon: Icon;
   children: ReactNode;
   className?: string;
+  action?: ReactNode;
 }
 
 export const SectionCard = ({
   title,
   icon: Icon,
   children,
-  className = "",
+  className,
+  action,
 }: SectionCardProps) => {
   return (
-    <motion.div
-      variants={cardVariants}
-      whileHover={{ y: -4 }}
-      className="hover-lift"
+    <section
+      className={cn(
+        "rounded-3xl border border-border bg-card p-4 sm:p-6",
+        className,
+      )}
     >
-      <Card
-        className={`transition-shadow duration-300 relative rounded-xl hover:shadow-lg edge-accent border-primary/20 overflow-hidden ${className}`}
-      >
-        {/* Top accent bar: mismo radio que el card */}
-        <div className="absolute top-0 left-0 right-0 h-2 rounded-t-xl bg-primary" />
-
-        <CardHeader className="pt-4 pb-3">
-          <div className="flex items-center gap-2">
-            <Icon className="h-5 w-5 text-primary" />
-            <CardTitle className="text-card-foreground text-base sm:text-lg font-semibold">
-              {title}
-            </CardTitle>
-          </div>
-        </CardHeader>
-
-        <CardContent className="text-card-foreground">{children}</CardContent>
-      </Card>
-    </motion.div>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2 text-foreground">
+          <Icon className="size-4 shrink-0" weight="duotone" />
+          <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
   );
 };

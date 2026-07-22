@@ -1,4 +1,4 @@
-import { InfoIcon } from "lucide-react";
+import { Info } from "@phosphor-icons/react";
 import {
   Tooltip,
   TooltipContent,
@@ -13,13 +13,14 @@ interface InfoTooltipProps {
 export const InfoTooltip = ({ content, className = "" }: InfoTooltipProps) => (
   <Tooltip>
     <TooltipTrigger asChild>
-      <InfoIcon
+      <Info
         size={17}
-        className={`text-muted-foreground hover:text-primary cursor-help transition-colors ${className}`}
+        weight="regular"
+        className={`cursor-help text-foreground transition-opacity hover:opacity-70 ${className}`}
       />
     </TooltipTrigger>
     <TooltipContent className="max-w-sm text-sm">
-      <p>{content}</p>
+      <p className="whitespace-pre-wrap break-words">{content}</p>
     </TooltipContent>
   </Tooltip>
 );

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { motion } from "framer-motion";
 import {
   Dialog,
   DialogContent,
@@ -13,22 +12,25 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Copy,
-  ExternalLink,
-  User,
-  Settings,
+  ArrowSquareOut,
   CheckCircle,
-  AlertCircle,
   Clock,
-  Hash,
   Code,
-} from "lucide-react";
+  Copy,
+  Gear,
+  Hash,
+  SpinnerGap,
+  User,
+  WarningCircle,
+} from "@phosphor-icons/react";
 import {
   type TransactionDetails,
   fetchTransactionDetails,
   formatTransactionTime,
   truncateHash,
 } from "@/utils/transactionFetcher";
+import { ADDRESS_CHARS, formatAddress } from "@/lib/format-address";
+import { toast } from "sonner";
 
 interface TransactionDetailModalProps {
   txHash: string | null;
@@ -53,12 +55,25 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
     setLoading(true);
     setError(null);
 
+    toast.loading("Loading transaction", {
+      id: "tx-detail",
+      description: "Fetching details from the network.",
+    });
+
     try {
       const transactionDetails = await fetchTransactionDetails(txHash);
       setDetails(transactionDetails);
+      toast.success("Transaction loaded", {
+        id: "tx-detail",
+        description: "Details are ready to review.",
+      });
     } catch (err) {
       setError("Failed to fetch transaction details");
       console.error("Error fetching transaction details:", err);
+      toast.error("Transaction failed", {
+        id: "tx-detail",
+        description: "Could not load transaction details.",
+      });
     } finally {
       setLoading(false);
     }
@@ -67,10 +82,14 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
   const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
-      // Optional: Show success toast using sonner
+      toast.success("Copied", {
+        description: "Value copied to your clipboard.",
+      });
     } catch (err) {
       console.error("Failed to copy to clipboard:", err);
-      // Optional: Show error toast
+      toast.error("Copy failed", {
+        description: "Could not copy this value.",
+      });
     }
   };
 
@@ -78,26 +97,25 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
     switch (status) {
       case "SUCCESS":
         return (
-          <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+          <CheckCircle className="size-4 text-foreground" weight="duotone" />
         );
       case "FAILED":
         return (
-          <AlertCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+          <WarningCircle className="size-4 text-destructive" weight="duotone" />
         );
       default:
-        return <Clock className="h-4 w-4 text-muted-foreground" />;
+        return (
+          <Clock className="size-4 text-foreground" weight="duotone" />
+        );
     }
   };
 
-  const getStatusBadgeColor = (status: string) => {
-    switch (status) {
-      case "SUCCESS":
-        return "bg-green-100 text-green-800 border-green-200 dark:bg-green-500/20 dark:text-green-300 dark:border-green-500/30";
-      case "FAILED":
-        return "bg-red-100 text-red-800 border-red-200 dark:bg-red-500/20 dark:text-red-300 dark:border-red-500/30";
-      default:
-        return "bg-secondary text-secondary-foreground border-border";
-    }
+  const getStatusVariant = (
+    status: string,
+  ): "secondary" | "destructive" | "outline" => {
+    if (status === "SUCCESS") return "secondary";
+    if (status === "FAILED") return "destructive";
+    return "outline";
   };
 
   const formatJsonValue = (value: unknown): string => {
@@ -114,13 +132,18 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
     }
   }, [isOpen, txHash, fetchDetails]);
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
       <DialogContent
-        className={`${isMobile ? "max-w-[95vw]" : "max-w-4xl"} max-h-[90vh] overflow-y-auto`}
+        className={`${isMobile ? "max-w-[95vw]" : "sm:max-w-4xl lg:max-w-5xl"} max-h-[92vh] overflow-y-auto`}
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Hash className="h-5 w-5" />
+            <Hash className="size-5 text-foreground" weight="duotone" />
             Transaction Details
           </DialogTitle>
           <DialogDescription>
@@ -130,44 +153,43 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
 
         {loading && (
           <div className="flex justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <SpinnerGap
+              className="size-6 animate-spin text-foreground"
+              weight="duotone"
+            />
           </div>
         )}
 
         {error && (
-          <div className="flex items-center gap-2 text-destructive py-4">
-            <AlertCircle className="h-5 w-5" />
+          <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+            <WarningCircle className="size-4 shrink-0" weight="duotone" />
             <span>{error}</span>
           </div>
         )}
 
         {details && !loading && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-4"
-          >
+          <div className="flex flex-col gap-4">
             {/* Basic Information */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">Transaction Overview</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <CardContent className="flex flex-col gap-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div>
                     <label className="text-sm font-medium text-foreground">
                       Hash
                     </label>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="font-mono text-sm bg-muted px-2 py-1 rounded">
-                        {isMobile
-                          ? truncateHash(details.txHash, true)
-                          : details.txHash}
+                      <span
+                        className="rounded bg-muted px-2 py-1 font-mono text-sm"
+                        title={details.txHash}
+                      >
+                        {truncateHash(details.txHash, isMobile)}
                       </span>
                       <Button
                         variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0"
+                        size="icon-sm"
                         onClick={() =>
                           window.open(
                             `https://stellar.expert/explorer/${process.env.NEXT_PUBLIC_STELLAR_NETWORK || "testnet"}/tx/${details.txHash}`,
@@ -175,12 +197,11 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
                           )
                         }
                       >
-                        <Copy className="h-4 w-4" />
+                        <Copy weight="duotone" className="text-foreground" />
                       </Button>
                       <Button
                         variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0"
+                        size="icon-sm"
                         onClick={() =>
                           window.open(
                             `https://stellar.expert/explorer/testnet/tx/${details.txHash}`,
@@ -188,7 +209,10 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
                           )
                         }
                       >
-                        <ExternalLink className="h-4 w-4" />
+                        <ArrowSquareOut
+                          weight="duotone"
+                          className="text-foreground"
+                        />
                       </Button>
                     </div>
                   </div>
@@ -198,7 +222,7 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
                     </label>
                     <div className="flex items-center gap-2 mt-1">
                       {getStatusIcon(details.status)}
-                      <Badge className={getStatusBadgeColor(details.status)}>
+                      <Badge variant={getStatusVariant(details.status)}>
                         {details.status}
                       </Badge>
                     </div>
@@ -227,26 +251,34 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <User className="h-5 w-5" />
+                  <User className="size-5 text-foreground" weight="duotone" />
                   Signers
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {details.signers.length > 0 ? (
-                  <div className="space-y-2">
+                  <div className="flex flex-col gap-2">
                     {details.signers.map((signer, index) => (
                       <div key={index} className="flex items-center gap-2">
-                        <span className="font-mono text-sm bg-muted px-2 py-1 rounded">
-                          {signer}
+                        <span
+                          className="rounded bg-muted px-2 py-1 font-mono text-sm"
+                          title={signer}
+                        >
+                          {formatAddress(
+                            signer,
+                            isMobile ? ADDRESS_CHARS.sm : ADDRESS_CHARS.md,
+                          )}
                         </span>
                         {signer !== "(Signature validation required)" && (
                           <Button
                             variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
+                            size="icon-sm"
                             onClick={() => copyToClipboard(signer)}
                           >
-                            <Copy className="h-4 w-4" />
+                            <Copy
+                              weight="duotone"
+                              className="text-foreground"
+                            />
                           </Button>
                         )}
                       </div>
@@ -265,11 +297,11 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
-                    <Settings className="h-5 w-5" />
+                    <Gear className="size-5 text-foreground" weight="duotone" />
                     Function Call
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="flex flex-col gap-4">
                   <div>
                     <label className="text-sm font-medium text-foreground">
                       Function
@@ -300,7 +332,7 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
-                    <Code className="h-5 w-5" />
+                    <Code className="size-5 text-foreground" weight="duotone" />
                     Result
                   </CardTitle>
                 </CardHeader>
@@ -320,7 +352,7 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
                 <CardTitle className="text-lg">Raw Transaction Data</CardTitle>
               </CardHeader>
               <CardContent>
-                <details className="space-y-2">
+                <details className="flex flex-col gap-2">
                   <summary className="cursor-pointer text-sm font-medium text-primary hover:text-primary/80">
                     Show Raw Data
                   </summary>
@@ -339,7 +371,7 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
                 </details>
               </CardContent>
             </Card>
-          </motion.div>
+          </div>
         )}
       </DialogContent>
     </Dialog>
