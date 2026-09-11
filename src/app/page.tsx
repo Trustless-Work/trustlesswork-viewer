@@ -61,7 +61,7 @@ const Home: NextPage = () => {
         toast.dismiss(RESOLVE_TOAST_ID);
       }
 
-      router.push(escrowPath(result.network, trimmed));
+      router.push(escrowPath(result.network, result.version, trimmed));
     } finally {
       setLoading(false);
     }

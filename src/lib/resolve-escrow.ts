@@ -1,9 +1,15 @@
 import { isStellarAddress } from "@/lib/format-address";
 import type { NetworkType } from "@/lib/network-config";
 import {
+  detectEscrowVersion,
+  type EscrowContractVersion,
+} from "@/mappers/escrow-mapper";
+import {
   getLedgerKeyContractCode,
   type EscrowMap,
 } from "@/utils/ledgerkeycontract";
+
+export type { EscrowContractVersion };
 
 export type ResolveEscrowReason = "invalid_id" | "not_found" | "not_escrow";
 
@@ -11,6 +17,7 @@ export type ResolveEscrowResult =
   | {
       readonly ok: true;
       network: NetworkType;
+      version: EscrowContractVersion;
       data: EscrowMap;
       switched: boolean;
     }
@@ -45,12 +52,31 @@ function hasAmountField(data: EscrowMap): boolean {
   return false;
 }
 
+function roleHasAddress(roleVal: EscrowMap[number]["val"] | undefined): boolean {
+  if (!roleVal) return false;
+  if (typeof roleVal.address === "string" && roleVal.address.length > 0) {
+    return true;
+  }
+  if (Array.isArray(roleVal.vec)) {
+    return roleVal.vec.some((item) => {
+      if (!item || typeof item !== "object") return false;
+      const direct = item as { address?: unknown; val?: { address?: unknown } };
+      if (typeof direct.address === "string" && direct.address.length > 0) {
+        return true;
+      }
+      return (
+        typeof direct.val?.address === "string" &&
+        direct.val.address.length > 0
+      );
+    });
+  }
+  return false;
+}
+
 function hasRolesWithAddress(data: EscrowMap): boolean {
   const rolesEntry = data.find((e) => e.key.symbol === "roles");
   if (!rolesEntry?.val?.map || !Array.isArray(rolesEntry.val.map)) return false;
-  return rolesEntry.val.map.some(
-    (role) => typeof role.val?.address === "string" && role.val.address.length > 0,
-  );
+  return rolesEntry.val.map.some((role) => roleHasAddress(role.val));
 }
 
 function hasMilestones(data: EscrowMap): boolean {
@@ -115,21 +141,33 @@ async function tryNetwork(
   }
 }
 
-export function escrowPath(network: NetworkType, contractId: string): string {
-  return `/${network}/${contractId.trim()}`;
+export function escrowPath(
+  network: NetworkType,
+  version: EscrowContractVersion,
+  contractId: string,
+): string {
+  return `/${network}/${version}/${contractId.trim()}`;
 }
 
 export function isNetworkType(value: string): value is NetworkType {
   return value === "testnet" || value === "mainnet";
 }
 
+export function isVersionSegment(value: string): value is EscrowContractVersion {
+  return value === "v1" || value === "v2";
+}
+
 export function networkLabel(network: NetworkType): string {
   return network === "mainnet" ? "Mainnet" : "Testnet";
 }
 
+export function versionLabel(version: EscrowContractVersion): string {
+  return version === "v2" ? "V2" : "V1";
+}
+
 /**
  * Resolves a contract ID on the preferred network, then the other network.
- * Validates Soroban C… format and basic escrow storage shape.
+ * Validates Soroban C… format and basic escrow storage shape; detects contract version.
  */
 export async function resolveEscrow(
   contractId: string,
@@ -150,6 +188,7 @@ export async function resolveEscrow(
     return {
       ok: true,
       network: preferredNetwork,
+      version: detectEscrowVersion(primary.data),
       data: primary.data,
       switched: false,
     };
@@ -164,6 +203,7 @@ export async function resolveEscrow(
     return {
       ok: true,
       network: other,
+      version: detectEscrowVersion(secondary.data),
       data: secondary.data,
       switched: true,
     };

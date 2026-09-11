@@ -30,6 +30,7 @@ import {
   truncateHash,
 } from "@/utils/transactionFetcher";
 import { ADDRESS_CHARS, formatAddress } from "@/lib/format-address";
+import type { NetworkType } from "@/lib/network-config";
 import { toast } from "sonner";
 
 interface TransactionDetailModalProps {
@@ -37,6 +38,7 @@ interface TransactionDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   isMobile: boolean;
+  network?: NetworkType;
 }
 
 export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
@@ -44,6 +46,7 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
   isOpen,
   onClose,
   isMobile,
+  network = "testnet",
 }) => {
   const [details, setDetails] = useState<TransactionDetails | null>(null);
   const [loading, setLoading] = useState(false);
@@ -61,7 +64,7 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
     });
 
     try {
-      const transactionDetails = await fetchTransactionDetails(txHash);
+      const transactionDetails = await fetchTransactionDetails(txHash, network);
       setDetails(transactionDetails);
       toast.success("Transaction loaded", {
         id: "tx-detail",
@@ -77,7 +80,7 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [txHash]);
+  }, [txHash, network]);
 
   const copyToClipboard = async (text: string) => {
     try {

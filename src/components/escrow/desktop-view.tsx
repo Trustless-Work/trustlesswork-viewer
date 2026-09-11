@@ -1,9 +1,6 @@
 import { ListChecks, Users } from "@phosphor-icons/react";
 import type { OrganizedEscrowData } from "@/mappers/escrow-mapper";
-import {
-  ROLE_PERMISSIONS,
-  getRoleDisplayName,
-} from "@/lib/escrow-constants";
+import { ROLE_PERMISSIONS } from "@/lib/escrow-constants";
 import { SectionCard } from "@/components/shared/section-card";
 import { MilestoneCard } from "@/components/shared/milestone-card";
 import { RoleCard } from "@/components/shared/role-card";
@@ -20,14 +17,13 @@ export const DesktopView = ({ organized }: DesktopViewProps) => {
     <div className="hidden flex-col gap-6 md:flex">
       <SectionCard title="Assigned Roles" icon={Users}>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {Object.entries(organized.roles).map(([key, value]) => (
+          {organized.roles.map((role) => (
             <RoleCard
-              key={key}
-              title={getRoleDisplayName(key)}
-              address={String(value)}
+              key={role.key}
+              title={role.label}
+              addresses={role.addresses}
               description={
-                ROLE_PERMISSIONS[getRoleDisplayName(key)] ||
-                "No description available"
+                ROLE_PERMISSIONS[role.label] || "No description available"
               }
             />
           ))}
@@ -53,6 +49,8 @@ export const DesktopView = ({ organized }: DesktopViewProps) => {
                 signer={milestone.signer}
                 approver={milestone.approver}
                 receiver={milestone.receiver}
+                evidence={milestone.evidence}
+                approvals={milestone.approvals}
               />
             ))}
           </div>

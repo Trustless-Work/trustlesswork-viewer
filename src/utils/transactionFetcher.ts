@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Contract } from "@stellar/stellar-sdk";
 import { ADDRESS_CHARS, formatAddress } from "@/lib/format-address";
+import { getNetworkConfig, type NetworkType } from "@/lib/network-config";
 
 // Types for transaction data
 export interface TransactionMetadata {
@@ -28,6 +29,7 @@ export interface FetchTransactionsOptions {
   startLedger?: number;
   cursor?: string;
   limit?: number;
+  network?: NetworkType;
 }
 
 export interface TransactionResponse {
@@ -39,9 +41,12 @@ export interface TransactionResponse {
   retentionNotice?: string;
 }
 
-const SOROBAN_RPC_URL =
-  process.env.NEXT_PUBLIC_SOROBAN_RPC_URL ||
-  "https://soroban-testnet.stellar.org";
+function resolveRpcUrl(network: NetworkType = "testnet"): string {
+  return (
+    process.env.NEXT_PUBLIC_SOROBAN_RPC_URL ||
+    getNetworkConfig(network).rpcUrl
+  );
+}
 
 /**
  * Fetches recent transactions for a contract using Soroban JSON-RPC
@@ -52,9 +57,9 @@ export async function fetchTransactions(
   options: FetchTransactionsOptions = {},
 ): Promise<TransactionResponse> {
   try {
-    const { startLedger, cursor, limit = 50 } = options;
+    const { startLedger, cursor, limit = 50, network = "testnet" } = options;
+    const rpcUrl = resolveRpcUrl(network);
 
-    // Get contract instance to derive transaction filter
     const contract = new Contract(contractId);
     const contractAddress = contract.contractId();
 
@@ -75,7 +80,7 @@ export async function fetchTransactions(
       },
     };
 
-    const response = await fetch(SOROBAN_RPC_URL, {
+    const response = await fetch(rpcUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -90,7 +95,6 @@ export async function fetchTransactions(
     const data = await response.json();
 
     if (data.error) {
-      // Handle retention-related errors gracefully
       if (
         data.error.code === -32600 ||
         data.error.message?.includes("retention")
@@ -132,7 +136,6 @@ export async function fetchTransactions(
   } catch (error) {
     console.error("Error fetching transactions:", error);
 
-    // Return graceful error response
     return {
       transactions: [],
       latestLedger: 0,
@@ -150,8 +153,10 @@ export async function fetchTransactions(
  */
 export async function fetchTransactionDetails(
   txHash: string,
+  network: NetworkType = "testnet",
 ): Promise<TransactionDetails | null> {
   try {
+    const rpcUrl = resolveRpcUrl(network);
     const requestBody = {
       jsonrpc: "2.0",
       id: 2,
@@ -161,7 +166,7 @@ export async function fetchTransactionDetails(
       },
     };
 
-    const response = await fetch(SOROBAN_RPC_URL, {
+    const response = await fetch(rpcUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -183,21 +188,17 @@ export async function fetchTransactionDetails(
     const tx = data.result;
     if (!tx) return null;
 
-    // Extract signers from envelope
     const signers: string[] = [];
     if (tx.envelopeXdr && tx.envelope?.signatures) {
-      // For now, we'll use a placeholder since extracting signers from XDR requires more complex parsing
       signers.push("(Signature validation required)");
     }
 
-    // Extract function call information from operations
     let calledFunction: string | undefined;
     let args: any[] | undefined;
     let result: any | undefined;
 
     if (tx.resultMetaXdr && tx.meta) {
       try {
-        // Look for invoke host function operations
         const operations = tx.envelope?.v1?.tx?.operations || [];
         const invokeOp = operations.find(
           (op: any) => op.body?.invokeHostFunction,
@@ -212,7 +213,6 @@ export async function fetchTransactionDetails(
           }
         }
 
-        // Extract result from meta
         if (tx.meta.v3?.sorobanMeta?.returnValue) {
           result = tx.meta.v3.sorobanMeta.returnValue;
         }

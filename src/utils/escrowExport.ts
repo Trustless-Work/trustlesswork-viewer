@@ -39,9 +39,10 @@ export const exportEscrowToPDF = (
     doc.setTextColor(0, 0, 0);
     doc.text("Escrow Summary", 14, 55);
 
-    const summaryData = [
+    const summaryData: string[][] = [
         ["Escrow ID", organized.properties.escrow_id],
         ["Description", organized.description],
+        ["Contract Version", organized.version === "v2" ? "V2" : "V1"],
         ["Escrow Type", organized.escrowType === "multi-release" ? "Multi-Release" : "Single-Release"],
         ["Engagement ID", organized.properties.engagement_id || "N/A"],
         ["Total Escrowed Amount", organized.properties.amount],
@@ -49,6 +50,12 @@ export const exportEscrowToPDF = (
         ["Platform Fee", organized.properties.platform_fee],
         ["Trustless Work Fee", "0.3%"],
     ];
+    if (organized.properties.receiver_memo) {
+        summaryData.push(["Receiver Memo", organized.properties.receiver_memo]);
+    }
+    if (organized.properties.funded_amount) {
+        summaryData.push(["Funded Amount", organized.properties.funded_amount]);
+    }
 
     autoTable(doc, {
         startY: 60,
@@ -64,13 +71,16 @@ export const exportEscrowToPDF = (
     doc.setFontSize(16);
     doc.text("Escrow Status", 14, statusY);
 
-    const statusData = [
+    const statusData: string[][] = [
         ["Progress", `${organized.progress}%`],
         ["Lifecycle State", organized.flags.lifecycle_state],
         ["Dispute State", organized.flags.dispute_flag],
         ["Release State", organized.flags.release_flag],
         ["Resolution State", organized.flags.resolved_flag],
     ];
+    if (organized.flags.dispute_reason) {
+        statusData.push(["Dispute Reason", organized.flags.dispute_reason]);
+    }
 
     autoTable(doc, {
         startY: statusY + 5,
@@ -86,10 +96,16 @@ export const exportEscrowToPDF = (
     doc.setFontSize(16);
     doc.text("Assigned Roles", 14, rolesY);
 
-    const rolesData = Object.entries(organized.roles).map(([role, address]) => [
-        role.charAt(0).toUpperCase() + role.slice(1),
-        address,
-    ]);
+    const rolesData: string[][] = [];
+    for (const role of organized.roles) {
+        role.addresses.forEach((address, index) => {
+            const name =
+                role.addresses.length > 1
+                    ? `${role.label} ${index + 1}`
+                    : role.label;
+            rolesData.push([name, address]);
+        });
+    }
 
     autoTable(doc, {
         startY: rolesY + 5,
@@ -107,34 +123,47 @@ export const exportEscrowToPDF = (
 
         let milestonesStartY = milestonesY + 15;
 
-        // Check if we need a new page for milestones
         if (milestonesY > 240) {
             doc.addPage();
             doc.setFontSize(16);
             doc.text("Milestones", 14, 22);
-            milestonesStartY = 30; // Reset startY for new page
+            milestonesStartY = 30;
         } else {
             doc.setFontSize(16);
             doc.text("Milestones", 14, milestonesY);
             milestonesStartY = milestonesY + 5;
         }
 
-        const milestoneHead = organized.escrowType === "multi-release"
-            ? [["ID", "Title", "Description", "Amount", "Status", "Approved"]]
-            : [["ID", "Title", "Description", "Status", "Approved"]];
+        const isMulti = organized.escrowType === "multi-release";
+        const milestoneHead = [
+            [
+                "ID",
+                "Title",
+                "Description",
+                ...(isMulti ? ["Amount"] : []),
+                "Status",
+                "Approvals",
+                "Approved",
+                "Evidence",
+            ],
+        ];
 
         const milestoneBody = organized.milestones.map((m: ParsedMilestone) => {
-            const base = [
+            const approvals =
+                m.approvals && m.approvals.target > 0
+                    ? `${m.approvals.count}/${m.approvals.target}`
+                    : "—";
+            const row = [
                 String(m.id + 1),
                 m.title,
                 m.description || "",
+                ...(isMulti ? [m.amount || "0.00"] : []),
                 m.status,
+                approvals,
                 m.approved ? "Yes" : "No",
+                m.evidence || "—",
             ];
-            if (organized.escrowType === "multi-release") {
-                base.splice(3, 0, m.amount || "0.00");
-            }
-            return base;
+            return row;
         });
 
         autoTable(doc, {
@@ -143,7 +172,7 @@ export const exportEscrowToPDF = (
             body: milestoneBody,
             theme: "striped",
             headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: "bold" },
-            styles: { fontSize: 9 },
+            styles: { fontSize: 8 },
         });
     }
 
@@ -165,7 +194,6 @@ export const exportEscrowToPDF = (
         );
     }
 
-    // Download PDF
     const filename = `EscrowReport_${organized.properties.escrow_id.substring(0, 8)}_${new Date().toISOString().split('T')[0]}.pdf`;
     doc.save(filename);
 };

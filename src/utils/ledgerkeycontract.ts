@@ -190,3 +190,44 @@ export async function getLedgerKeyContractCode(
       "This contract may not be a Trustless Work escrow, or the contract schema has changed.",
   );
 }
+
+/**
+ * Read optional `DataKey::FundedAmount` (v2 persistent). Absent before first fund.
+ * Returns the raw EscrowValue (typically i128) or null when the key is missing.
+ */
+export async function getFundedAmount(
+  contractId: string,
+  network: NetworkType = "testnet",
+): Promise<EscrowValue | null> {
+  const { rpcUrl } = getNetworkConfig(network);
+
+  let keyBase64: string;
+  try {
+    keyBase64 = buildPersistentEscrowLedgerKey(contractId, "FundedAmount");
+  } catch {
+    return null;
+  }
+
+  const res = await fetch(rpcUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 8675310,
+      method: "getLedgerEntries",
+      params: {
+        keys: [keyBase64],
+        xdrFormat: "json",
+      },
+    }),
+  });
+
+  if (!res.ok) return null;
+
+  const json = await res.json();
+  if (json.error || !json.result?.entries?.length) return null;
+
+  const val = json.result.entries[0]?.dataJson?.contract_data?.val;
+  if (!val || typeof val !== "object") return null;
+  return val as EscrowValue;
+}

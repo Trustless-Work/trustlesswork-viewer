@@ -1,4 +1,4 @@
-import { ROLE_ICONS } from "@/lib/escrow-constants";
+import { ROLE_ICONS } from "@/lib/role-icons";
 import type { Icon } from "@phosphor-icons/react";
 
 interface RoleIconProps {
