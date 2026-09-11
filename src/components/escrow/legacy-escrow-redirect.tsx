@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useNetwork } from "@/contexts/NetworkContext";
+import type { NetworkType } from "@/lib/network-config";
 import {
   escrowPath,
   networkLabel,
@@ -16,14 +17,17 @@ const RESOLVE_TOAST_ID = "legacy-escrow-resolve";
 
 interface LegacyEscrowRedirectProps {
   contractId: string;
+  /** When set (e.g. `/testnet/C…`), prefer that network first. */
+  preferredNetwork?: NetworkType;
 }
 
 /**
- * Legacy `/[contractId]` bookmarks: resolve network then replace with
- * `/{network}/{id}`.
+ * Legacy `/[contractId]` or `/[network]/[contractId]` bookmarks: resolve
+ * network + version then replace with `/{network}/{version}/{id}`.
  */
 export function LegacyEscrowRedirect({
   contractId,
+  preferredNetwork,
 }: LegacyEscrowRedirectProps) {
   const router = useRouter();
   const { currentNetwork, setNetwork } = useNetwork();
@@ -38,10 +42,13 @@ export function LegacyEscrowRedirect({
     async function run() {
       toast.loading("Resolving escrow", {
         id: RESOLVE_TOAST_ID,
-        description: "Detecting network for this contract.",
+        description: "Detecting network and contract version.",
       });
 
-      const result = await resolveEscrow(contractId, currentNetwork);
+      const result = await resolveEscrow(
+        contractId,
+        preferredNetwork ?? currentNetwork,
+      );
       if (cancelled) return;
 
       if (!result.ok) {
@@ -62,7 +69,7 @@ export function LegacyEscrowRedirect({
       } else {
         toast.dismiss(RESOLVE_TOAST_ID);
       }
-      router.replace(escrowPath(result.network, contractId));
+      router.replace(escrowPath(result.network, result.version, contractId));
     }
 
     void run();

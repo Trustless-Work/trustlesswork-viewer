@@ -49,6 +49,15 @@ export function getStellarExpertContractUrl(
   return `https://stellar.expert/explorer/${stellarExpertNetwork}/contract/${contractId.trim()}`;
 }
 
+/** Stellar Expert URL for a transaction hash. */
+export function getStellarExpertTxUrl(
+  network: NetworkType,
+  txHash: string,
+): string {
+  const stellarExpertNetwork = network === "mainnet" ? "public" : "testnet";
+  return `https://stellar.expert/explorer/${stellarExpertNetwork}/tx/${txHash.trim()}`;
+}
+
 /**
  * Generates a Stellar Lab URL for the contract explorer
  *

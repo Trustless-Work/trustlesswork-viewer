@@ -15,24 +15,29 @@ import {
   networkLabel,
   resolveEscrow,
   toastTitleForReason,
+  type EscrowContractVersion,
 } from "@/lib/resolve-escrow";
 
 import { Header } from "@/components/escrow/header";
 import { SearchCard } from "@/components/escrow/search-card";
 import { EscrowContent } from "@/components/escrow/escrow-content";
 import { TransactionTable } from "@/components/escrow/TransactionTable";
+import { EventsTable } from "@/components/escrow/EventsTable";
 import { TransactionDetailModal } from "@/components/escrow/TransactionDetailModal";
 import {
   fetchTransactions,
   type TransactionMetadata,
   type TransactionResponse,
 } from "@/utils/transactionFetcher";
-import { LedgerBalancePanel } from "@/components/escrow/LedgerBalancePanel";
+import {
+  fetchContractEvents,
+  type EscrowEvent,
+  type EventsResponse,
+} from "@/utils/eventFetcher";
 import { useIsMobile } from "@/hooks/useIsMobile";
 
 import { useEscrowData } from "@/hooks/useEscrowData";
 import { useEnrichedTrustline } from "@/hooks/useEnrichedTrustline";
-import { useTokenBalance } from "@/hooks/useTokenBalance";
 
 const DEBUG = process.env.NODE_ENV !== "production";
 const RESOLVE_TOAST_ID = "escrow-resolve";
@@ -40,11 +45,13 @@ const RESOLVE_TOAST_ID = "escrow-resolve";
 interface EscrowDetailsClientProps {
   initialEscrowId: string;
   initialNetwork: NetworkType;
+  initialVersion: EscrowContractVersion;
 }
 
 const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
   initialEscrowId,
   initialNetwork,
+  initialVersion,
 }) => {
   const router = useRouter();
   const { currentNetwork, setNetwork } = useNetwork();
@@ -65,16 +72,10 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
   useEffect(() => {
     setContractId(initialEscrowId);
     autoSwitchAttempted.current = false;
-  }, [initialEscrowId, initialNetwork]);
+  }, [initialEscrowId, initialNetwork, initialVersion]);
 
   const { raw, organized, loading, error, refresh } = useEscrowData(
     initialEscrowId,
-    initialNetwork,
-  );
-
-  const { ledgerBalance, decimals, mismatch } = useTokenBalance(
-    initialEscrowId,
-    raw,
     initialNetwork,
   );
 
@@ -86,18 +87,35 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
     return {
       ...organized,
       trustline: enrichedTrustline,
-      properties: {
-        ...organized.properties,
-        ...(ledgerBalance ? { balance: ledgerBalance } : {}),
-      },
     };
-  }, [organized, ledgerBalance, enrichedTrustline]);
+  }, [organized, enrichedTrustline]);
+
+  // Canonicalize URL when detected version differs from URL segment
+  useEffect(() => {
+    if (!organized) return;
+    if (organized.version === initialVersion) return;
+    router.replace(
+      escrowPath(initialNetwork, organized.version, initialEscrowId),
+    );
+  }, [
+    organized,
+    initialVersion,
+    initialNetwork,
+    initialEscrowId,
+    router,
+  ]);
 
   const [transactions, setTransactions] = useState<TransactionMetadata[]>([]);
   const [transactionLoading, setTransactionLoading] = useState<boolean>(false);
   const [transactionError, setTransactionError] = useState<string | null>(null);
   const [transactionResponse, setTransactionResponse] =
     useState<TransactionResponse | null>(null);
+  const [events, setEvents] = useState<EscrowEvent[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
+  const [eventsError, setEventsError] = useState<string | null>(null);
+  const [eventsResponse, setEventsResponse] = useState<EventsResponse | null>(
+    null,
+  );
   const [selectedTxHash, setSelectedTxHash] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [showOnlyTransactions, setShowOnlyTransactions] =
@@ -110,7 +128,11 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
       setTransactionLoading(true);
       setTransactionError(null);
       try {
-        const response = await fetchTransactions(id, { cursor, limit: 20 });
+        const response = await fetchTransactions(id, {
+          cursor,
+          limit: 20,
+          network: initialNetwork,
+        });
         setTransactionResponse(response);
         if (cursor) {
           setTransactions((prev) => [...prev, ...response.transactions]);
@@ -127,13 +149,53 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
         setTransactionLoading(false);
       }
     },
-    [],
+    [initialNetwork],
+  );
+
+  const fetchEventData = useCallback(
+    async (id: string, cursor?: string) => {
+      if (!id) return;
+      setEventsLoading(true);
+      setEventsError(null);
+      try {
+        const response = await fetchContractEvents(id, {
+          cursor,
+          limit: 50,
+          network: initialNetwork,
+        });
+        setEventsResponse(response);
+        if (cursor) {
+          setEvents((prev) => {
+            const seen = new Set(prev.map((e) => e.id));
+            const merged = [...prev];
+            for (const event of response.events) {
+              if (!seen.has(event.id)) merged.push(event);
+            }
+            return merged.sort(
+              (a, b) => b.ledger - a.ledger || a.name.localeCompare(b.name),
+            );
+          });
+        } else {
+          setEvents(response.events);
+        }
+      } catch (err: unknown) {
+        const message = getErrorMessage(err, "Failed to fetch events");
+        setEventsError(message);
+        toast.error("Events failed", {
+          description: message,
+        });
+      } finally {
+        setEventsLoading(false);
+      }
+    },
+    [initialNetwork],
   );
 
   useEffect(() => {
     if (!initialEscrowId) return;
     fetchTransactionData(initialEscrowId);
-  }, [initialEscrowId, initialNetwork, fetchTransactionData]);
+    fetchEventData(initialEscrowId);
+  }, [initialEscrowId, initialNetwork, fetchTransactionData, fetchEventData]);
 
   // Auto-switch / bail out when the URL network has no valid escrow
   useEffect(() => {
@@ -149,12 +211,20 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
         const result = await resolveEscrow(initialEscrowId, initialNetwork);
         if (cancelled) return;
 
-        if (result.ok && result.network !== initialNetwork) {
+        if (
+          result.ok &&
+          (result.network !== initialNetwork ||
+            result.version !== initialVersion)
+        ) {
           setNetwork(result.network);
-          toast.info(`Switched to ${networkLabel(result.network)}`, {
-            description: "Contract found on the other network.",
-          });
-          router.replace(escrowPath(result.network, initialEscrowId));
+          if (result.network !== initialNetwork) {
+            toast.info(`Switched to ${networkLabel(result.network)}`, {
+              description: "Contract found on the other network.",
+            });
+          }
+          router.replace(
+            escrowPath(result.network, result.version, initialEscrowId),
+          );
           return;
         }
 
@@ -183,6 +253,7 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
     error,
     initialEscrowId,
     initialNetwork,
+    initialVersion,
     router,
     setNetwork,
     refresh,
@@ -227,12 +298,14 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
 
         if (
           result.network === initialNetwork &&
+          result.version === initialVersion &&
           trimmed === initialEscrowId
         ) {
           await refresh();
           fetchTransactionData(trimmed);
+          fetchEventData(trimmed);
         } else {
-          router.push(escrowPath(result.network, trimmed));
+          router.push(escrowPath(result.network, result.version, trimmed));
         }
       } finally {
         setResolving(false);
@@ -240,10 +313,12 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
     },
     [
       initialNetwork,
+      initialVersion,
       initialEscrowId,
       setNetwork,
       refresh,
       fetchTransactionData,
+      fetchEventData,
       router,
     ],
   );
@@ -276,6 +351,12 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
     }
   };
 
+  const handleLoadMoreEvents = () => {
+    if (eventsResponse?.cursor && initialEscrowId) {
+      fetchEventData(initialEscrowId, eventsResponse.cursor);
+    }
+  };
+
   useEffect(() => {
     if (showOnlyTransactions && txRef.current) {
       try {
@@ -289,8 +370,9 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
   useEffect(() => {
     if (!DEBUG) return;
     console.log("[DBG][EscrowDetails] network:", initialNetwork);
+    console.log("[DBG][EscrowDetails] version:", initialVersion);
     console.log("[DBG][EscrowDetails] contractId:", initialEscrowId);
-  }, [initialNetwork, initialEscrowId]);
+  }, [initialNetwork, initialVersion, initialEscrowId]);
 
   useEffect(() => {
     if (!DEBUG) return;
@@ -301,15 +383,6 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
     if (!DEBUG) return;
     console.log("[DBG][EscrowDetails] organized data:", organized);
   }, [organized]);
-
-  useEffect(() => {
-    if (!DEBUG) return;
-    console.log("[DBG][EscrowDetails] token live balance:", {
-      ledgerBalance,
-      decimals,
-      mismatch,
-    });
-  }, [ledgerBalance, decimals, mismatch]);
 
   const busy = loading || resolving;
 
@@ -350,13 +423,18 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
               />
             )}
 
-            {!showOnlyTransactions && raw && ledgerBalance && !error && (
-              <LedgerBalancePanel
-                balance={ledgerBalance}
-                symbol={enrichedTrustline.assetCode}
-                decimals={decimals}
-                mismatch={mismatch}
-              />
+            {!showOnlyTransactions && raw && !error && (
+              <section className="mt-6 rounded-3xl border border-border bg-card p-4 sm:p-6">
+                <EventsTable
+                  events={events}
+                  loading={eventsLoading}
+                  error={eventsError}
+                  retentionNotice={eventsResponse?.retentionNotice}
+                  hasMore={eventsResponse?.hasMore || false}
+                  network={initialNetwork}
+                  onLoadMore={handleLoadMoreEvents}
+                />
+              </section>
             )}
 
             {raw && !error && showOnlyTransactions && (
@@ -388,6 +466,7 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
                     error={transactionError}
                     retentionNotice={transactionResponse?.retentionNotice}
                     hasMore={transactionResponse?.hasMore || false}
+                    network={initialNetwork}
                     onLoadMore={handleLoadMoreTransactions}
                     onTransactionClick={handleTransactionClick}
                     isMobile={isMobile}
@@ -401,6 +480,7 @@ const EscrowDetailsClient: React.FC<EscrowDetailsClientProps> = ({
               isOpen={isModalOpen}
               onClose={handleModalClose}
               isMobile={isMobile}
+              network={initialNetwork}
             />
           </div>
         </main>

@@ -4,7 +4,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useNetwork } from "@/contexts/NetworkContext";
 import { NetworkType } from "@/lib/network-config";
-import { escrowPath, isNetworkType } from "@/lib/resolve-escrow";
+import {
+  escrowPath,
+  isNetworkType,
+  isVersionSegment,
+  type EscrowContractVersion,
+} from "@/lib/resolve-escrow";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -24,13 +29,20 @@ const networks: { value: NetworkType; label: string }[] = [
 
 function parseEscrowPath(pathname: string): {
   network: NetworkType;
+  version: EscrowContractVersion;
   contractId: string;
 } | null {
   const segments = pathname.split("/").filter(Boolean);
-  if (segments.length !== 2) return null;
-  const [network, contractId] = segments;
-  if (!isNetworkType(network) || !contractId.startsWith("C")) return null;
-  return { network, contractId };
+  if (segments.length !== 3) return null;
+  const [network, version, contractId] = segments;
+  if (
+    !isNetworkType(network) ||
+    !isVersionSegment(version) ||
+    !contractId.startsWith("C")
+  ) {
+    return null;
+  }
+  return { network, version, contractId };
 }
 
 export function NetworkToggle({ className }: NetworkToggleProps) {
@@ -42,7 +54,9 @@ export function NetworkToggle({ className }: NetworkToggleProps) {
   const handleSelect = (network: NetworkType) => {
     setNetwork(network);
     if (escrowRoute && network !== escrowRoute.network) {
-      router.push(escrowPath(network, escrowRoute.contractId));
+      router.push(
+        escrowPath(network, escrowRoute.version, escrowRoute.contractId),
+      );
     }
   };
 

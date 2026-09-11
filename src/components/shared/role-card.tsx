@@ -12,6 +12,7 @@ export type RoleTitle =
   | "Dispute Resolver"
   | "Platform Address"
   | "Receiver"
+  | "Admin"
   | "Issuer"
   | "Depositor"
   | "Observer"
@@ -19,7 +20,7 @@ export type RoleTitle =
 
 interface RoleCardProps {
   title: string;
-  address: string;
+  addresses: string[];
   description: string;
 }
 
@@ -41,7 +42,9 @@ export const RoleCardSkeleton = () => (
   </article>
 );
 
-export const RoleCard = ({ title, address, description }: RoleCardProps) => {
+export const RoleCard = ({ title, addresses, description }: RoleCardProps) => {
+  const list = addresses.filter(Boolean);
+
   return (
     <article className="mb-4 min-w-0 rounded-3xl border border-border bg-card p-5 shadow-sm">
       <div className="mb-3 flex min-w-0 items-center gap-3">
@@ -54,13 +57,18 @@ export const RoleCard = ({ title, address, description }: RoleCardProps) => {
         </h3>
       </div>
 
-      <DetailRow
-        label="Address"
-        value={address}
-        canCopy
-        isAddress
-        addressChars={6}
-      />
+      <div className="flex flex-col gap-1">
+        {list.map((address, index) => (
+          <DetailRow
+            key={`${address}-${index}`}
+            label={list.length > 1 ? `Address ${index + 1}` : "Address"}
+            value={address}
+            canCopy
+            isAddress
+            addressChars={6}
+          />
+        ))}
+      </div>
     </article>
   );
 };

@@ -2,9 +2,12 @@ import { StatusBadge } from "./status-badge";
 import { DetailRow } from "./detail-row";
 import { TruncatedText } from "./truncated-text";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { ADDRESS_CHARS } from "@/lib/format-address";
-import { ROLE_PERMISSIONS } from "@/lib/escrow-constants";
+import { FIELD_TOOLTIPS, ROLE_PERMISSIONS } from "@/lib/escrow-constants";
 import { MoneyStat } from "@/components/shared/UsdcAmount";
+import type { MilestoneApprovals } from "@/mappers/escrow-mapper";
+import { InfoTooltip } from "./info-tooltip";
 
 interface MilestoneProps {
   index: number;
@@ -21,6 +24,8 @@ interface MilestoneProps {
   signer?: string;
   approver?: string;
   receiver?: string;
+  evidence?: string;
+  approvals?: MilestoneApprovals;
 }
 
 export const MilestoneCardSkeleton = () => (
@@ -61,7 +66,14 @@ export const MilestoneCard = ({
   signer,
   approver,
   receiver,
+  evidence,
+  approvals,
 }: MilestoneProps) => {
+  const approvalsLabel =
+    approvals && approvals.target > 0
+      ? `${approvals.count}/${approvals.target}`
+      : null;
+
   return (
     <article className="mb-4 min-h-0 rounded-3xl border border-border bg-card p-5 shadow-sm">
       <div className="mb-3 flex items-start justify-between gap-3">
@@ -73,8 +85,13 @@ export const MilestoneCard = ({
           {title || `Milestone ${index + 1}`}
         </TruncatedText>
         <div className="flex max-w-[60%] shrink-0 flex-wrap items-center justify-end gap-1.5">
-          {/* Status is always shown — independent of approval / flags */}
           <StatusBadge status={status || "Pending"} type="milestone" />
+          {approvalsLabel ? (
+            <Badge variant="outline" className="gap-1 font-mono text-xs">
+              {approvalsLabel}
+              <InfoTooltip content={FIELD_TOOLTIPS.milestone_approvals} />
+            </Badge>
+          ) : null}
           {approved ? <StatusBadge status="approved" /> : null}
           {dispute_flag ? (
             <StatusBadge status="true" type="dispute" />
@@ -101,6 +118,18 @@ export const MilestoneCard = ({
             size="lg"
             emphasis={false}
           />
+        ) : null}
+
+        {evidence ? (
+          <div className="flex flex-col gap-1">
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              Evidence
+              <InfoTooltip content={FIELD_TOOLTIPS.milestone_evidence} />
+            </span>
+            <TruncatedText as="p" lines={2} className="text-sm break-all">
+              {evidence}
+            </TruncatedText>
+          </div>
         ) : null}
 
         {(receiver || signer || approver) && (

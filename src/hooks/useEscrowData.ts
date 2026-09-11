@@ -2,10 +2,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
+  getFundedAmount,
   getLedgerKeyContractCode,
   type EscrowMap,
+  type EscrowValue,
 } from "@/utils/ledgerkeycontract";
 import {
+  detectEscrowVersion,
   organizeEscrowData,
   type OrganizedEscrowData,
 } from "@/mappers/escrow-mapper";
@@ -52,8 +55,13 @@ export function useEscrowData(
         return;
       }
 
+      let fundedAmount: EscrowValue | null = null;
+      if (detectEscrowVersion(data) === "v2") {
+        fundedAmount = await getFundedAmount(contractId, network);
+      }
+
       setRaw(data);
-      setOrganized(organizeEscrowData(data, contractId, network));
+      setOrganized(organizeEscrowData(data, contractId, network, fundedAmount));
       toast.success("Escrow loaded", {
         id: ESCROW_TOAST_ID,
         description: "Contract details are ready to view.",

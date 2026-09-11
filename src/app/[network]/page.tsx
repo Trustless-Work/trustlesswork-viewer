@@ -10,7 +10,7 @@ interface NetworkOrLegacyPageProps {
 /**
  * Single-segment routes under `/[network]`:
  * - `/testnet` or `/mainnet` → home
- * - `/C…` (legacy bookmark) → resolve then redirect to `/{network}/{id}`
+ * - `/C…` (legacy bookmark) → resolve network + version → `/{network}/{version}/{id}`
  */
 const NetworkOrLegacyPage: NextPage<NetworkOrLegacyPageProps> = async ({
   params,

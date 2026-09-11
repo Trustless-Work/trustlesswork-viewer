@@ -22,6 +22,8 @@ import {
 } from "@/components/escrow/trustline-section";
 import type { NetworkType } from "@/lib/network-config";
 import type { OrganizedEscrowData } from "@/mappers/escrow-mapper";
+import { FIELD_TOOLTIPS } from "@/lib/escrow-constants";
+import { InfoTooltip } from "@/components/shared/info-tooltip";
 
 interface TitleCardProps {
   organized: OrganizedEscrowData;
@@ -40,6 +42,7 @@ export const TitleCardSkeleton = () => (
         <Skeleton className="h-4 w-3/4 max-w-sm" />
       </div>
       <div className="flex flex-wrap items-center gap-2">
+        <Skeleton className="h-5 w-12 rounded-4xl" />
         <Skeleton className="h-5 w-28 rounded-4xl" />
         <Skeleton className="h-5 w-24 rounded-4xl" />
       </div>
@@ -126,6 +129,7 @@ export const TitleCard = ({
     description,
     progress,
     escrowType,
+    version,
     properties,
     flags,
     trustline,
@@ -137,6 +141,8 @@ export const TitleCard = ({
   const platformFee = properties.platform_fee ?? "N/A";
   const engagementId = properties.engagement_id ?? "N/A";
   const contractId = properties.escrow_id ?? "";
+  const receiverMemo = properties.receiver_memo;
+  const fundedAmount = properties.funded_amount;
 
   return (
     <section className="mb-6 rounded-3xl border border-border bg-card p-6 sm:p-8">
@@ -162,6 +168,7 @@ export const TitleCard = ({
         </div>
 
         <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <Badge variant="outline">{version === "v2" ? "V2" : "V1"}</Badge>
           {escrowType && (
             <Badge variant="outline">
               {escrowType === "multi-release"
@@ -191,12 +198,32 @@ export const TitleCard = ({
         </div>
       </div>
 
+      {flags.dispute_flag === "True" && flags.dispute_reason ? (
+        <p className="mt-4 flex items-start gap-1.5 text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">Dispute reason:</span>
+          <TruncatedText as="span" lines={2} className="flex-1">
+            {flags.dispute_reason}
+          </TruncatedText>
+          <InfoTooltip content={FIELD_TOOLTIPS.dispute_reason} />
+        </p>
+      ) : null}
+
       {/* Primary escrow stats */}
       <dl className="mt-8 grid grid-cols-2 gap-6 lg:grid-cols-4 [&>*]:min-w-0">
         <MoneyStat label="Amount" value={amount} symbol={symbol} />
         <MoneyStat label="Balance" value={balance} symbol={symbol} />
         <OverviewStat label="Platform Fee" value={platformFee} />
         <OverviewStat label="Engagement ID" value={engagementId} mono />
+        {receiverMemo ? (
+          <OverviewStat label="Receiver Memo" value={receiverMemo} mono />
+        ) : null}
+        {fundedAmount ? (
+          <MoneyStat
+            label="Funded Amount"
+            value={fundedAmount}
+            symbol={symbol}
+          />
+        ) : null}
       </dl>
 
       <div className="my-6 border-t border-border" />
